@@ -7,14 +7,12 @@ use crate::version_id::VersionId;
 use crate::{biver_result, hash, image_magick, known_file_types, nickname, repository_io};
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::{fs, io};
 
 const DEFAULT_BRANCH: &str = "main";
-
-const MAX_CONSECUTIVE_PATCHES: usize = 7;
 
 pub enum CommitResult {
     Ok,
@@ -38,6 +36,12 @@ pub fn commit_initial_version(env: &Env, repo_paths: &RepositoryPaths, branch: O
 
     let branch = branch.unwrap_or(DEFAULT_BRANCH);
 
+    let content_blob_file_name = content_blob_file_name(new_version_id);
+    let content_blob_file_path = repo_paths.file_path(&content_blob_file_name);
+
+    let preview_blob_file_name = preview_blob_file_name(env, repo_paths, new_version_id);
+    let preview_blob_file_path = preview_blob_file_name.as_ref().map(|n| repo_paths.file_path(n));
+
     let new_version = Version {
         id: new_version_id,
         creation_time: Utc::now(),
@@ -47,22 +51,21 @@ pub fn commit_initial_version(env: &Env, repo_paths: &RepositoryPaths, branch: O
         description: description.unwrap_or_default().to_string(),
         parent: None,
         content_blob: ContentBlob::Full {
-            full_blob_file_name: content_blob_file_name(new_version_id),
+            full_blob_file_name: content_blob_file_name,
         },
-        preview_blob_file_name: preview_blob_file_name(env, repo_paths, new_version_id),
-        compression: compression(versioned_file_length, versioned_file_length),
+        preview_blob_file_name,
     };
 
     let repo_data = RepositoryData {
         head: Head::Branch(branch.to_string()),
         branches: HashMap::from([(branch.to_string(), new_version_id)]),
-        versions: vec![new_version.clone()],
+        versions: vec![new_version],
     };
 
-    if let Some(preview_blob_file_name) = new_version.preview_blob_file_name {
-        repository_io::store_version_preview(env, repo_paths, &preview_blob_file_name, &repo_paths.versioned_file)?;
+    if let Some(preview_blob_file_path) = preview_blob_file_path {
+        repository_io::store_version_preview(env, &preview_blob_file_path, &repo_paths.versioned_file)?;
     }
-    repository_io::store_version_content(env, repo_paths, &new_version.content_blob, &repo_paths.versioned_file)?;
+    repository_io::store_version_content_full(&content_blob_file_path, &repo_paths.versioned_file)?;
     repository_io::write_data(repo_paths, &repo_data)?;
 
     Ok(CommitResult::Ok)
@@ -93,13 +96,10 @@ pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut R
 
     let new_version_id = VersionId::new();
 
-    let content_blob = content_blob(repo_data, Some(parent.id), content_blob_file_name(new_version_id));
-    let content_blob_file_name = content_blob.own_blob_file_name();
+    let content_blob = store_version_content(env, repo_paths, repo_data, new_version_id, Some(parent.id))?;
 
-    repository_io::store_version_content(env, repo_paths, &content_blob, &repo_paths.versioned_file)?;
-
-    let content_blob_size = fs::metadata(repo_paths.file_path(content_blob_file_name))?.len();
-    let compression = compression(versioned_file_length, content_blob_size);
+    let preview_blob_file_name = preview_blob_file_name(env, repo_paths, new_version_id);
+    let preview_blob_file_path = preview_blob_file_name.as_ref().map(|n| repo_paths.file_path(n));
 
     let new_version = Version {
         id: new_version_id,
@@ -110,16 +110,15 @@ pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut R
         description: description.unwrap_or_default().to_string(),
         parent: Some(parent.id),
         content_blob,
-        preview_blob_file_name: preview_blob_file_name(env, repo_paths, new_version_id),
-        compression,
+        preview_blob_file_name,
     };
 
     repo_data.head = Head::Branch(branch.to_string());
-    repo_data.versions.push(new_version.clone());
+    repo_data.versions.push(new_version);
     repo_data.branches.insert(branch.to_string(), new_version_id);
 
-    if let Some(preview_blob_file_name) = new_version.preview_blob_file_name {
-        repository_io::store_version_preview(env, repo_paths, &preview_blob_file_name, &repo_paths.versioned_file)?;
+    if let Some(preview_blob_file_path) = preview_blob_file_path {
+        repository_io::store_version_preview(env, &preview_blob_file_path, &repo_paths.versioned_file)?;
     }
     repository_io::write_data(repo_paths, repo_data)?;
 
@@ -162,13 +161,10 @@ pub fn amend_head(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut Repos
 
     let new_version_id = VersionId::new();
 
-    let content_blob = content_blob(repo_data, head.parent, content_blob_file_name(new_version_id));
-    let content_blob_file_name = content_blob.own_blob_file_name();
+    let content_blob = store_version_content(env, repo_paths, repo_data, new_version_id, head.parent)?;
 
-    repository_io::store_version_content(env, repo_paths, &content_blob, &repo_paths.versioned_file)?;
-
-    let content_blob_size = fs::metadata(repo_paths.file_path(content_blob_file_name))?.len();
-    let compression = compression(versioned_file_length, content_blob_size);
+    let preview_blob_file_name = preview_blob_file_name(env, repo_paths, new_version_id);
+    let preview_blob_file_path = preview_blob_file_name.as_ref().map(|n| repo_paths.file_path(n));
 
     let new_head = Version {
         id: new_version_id,
@@ -179,8 +175,7 @@ pub fn amend_head(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut Repos
         description: description.unwrap_or(&head.description).to_string(),
         parent: head.parent,
         content_blob,
-        preview_blob_file_name: preview_blob_file_name(env, repo_paths, new_version_id),
-        compression,
+        preview_blob_file_name,
     };
 
     repo_data.branches.insert(head_branch.to_string(), new_version_id);
@@ -189,8 +184,8 @@ pub fn amend_head(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut Repos
 
     let new_head = repo_data.head_version();
 
-    if let Some(preview_blob_file_name) = &new_head.preview_blob_file_name {
-        repository_io::store_version_preview(env, repo_paths, &preview_blob_file_name, &repo_paths.versioned_file)?;
+    if let Some(preview_blob_file_path) = preview_blob_file_path {
+        repository_io::store_version_preview(env, &preview_blob_file_path, &repo_paths.versioned_file)?;
     }
     repository_io::store_version_content(env, repo_paths, &new_head.content_blob, &repo_paths.versioned_file)?;
     repository_io::write_data(repo_paths, &repo_data)?;
@@ -568,43 +563,6 @@ fn content_blob_file_name(version_id: VersionId) -> String {
     version_id.to_file_name() + "_content"
 }
 
-fn content_blob(repo_data: &RepositoryData, parent_id: Option<VersionId>, version_content_blob_file_name: String) -> ContentBlob {
-    let Some(parent_id) = parent_id else {
-        return ContentBlob::Full {
-            full_blob_file_name: version_content_blob_file_name,
-        };
-    };
-
-    let closest_ancestor_full_blob_info = repo_data
-        .iter_version_and_ancestors(parent_id)
-        .enumerate()
-        .filter_map(|(index, ancestor)| {
-            if let ContentBlob::Full { full_blob_file_name } = &ancestor.content_blob {
-                Some((index, full_blob_file_name))
-            } else {
-                None
-            }
-        })
-        .next();
-
-    let Some((closest_ancestor_full_blob_index, closest_ancestor_full_blob_file_name)) = closest_ancestor_full_blob_info else {
-        return ContentBlob::Full {
-            full_blob_file_name: version_content_blob_file_name,
-        };
-    };
-
-    if closest_ancestor_full_blob_index >= MAX_CONSECUTIVE_PATCHES {
-        ContentBlob::Full {
-            full_blob_file_name: version_content_blob_file_name,
-        }
-    } else {
-        ContentBlob::Patch {
-            base_blob_file_name: closest_ancestor_full_blob_file_name.clone(),
-            patch_blob_file_name: version_content_blob_file_name,
-        }
-    }
-}
-
 fn preview_blob_file_name(env: &Env, repo_paths: &RepositoryPaths, version_id: VersionId) -> Option<String> {
     if can_create_preview(env, repo_paths) {
         let file_name = version_id.to_file_name() + "_preview";
@@ -626,6 +584,89 @@ fn can_create_preview(env: &Env, repo_paths: &RepositoryPaths) -> bool {
     known_file_types::is_image(versioned_file_extension)
 }
 
-fn compression(versioned_file_length: u64, content_blob_size: u64) -> f64 {
-    (versioned_file_length as f64 - content_blob_size as f64) / versioned_file_length as f64
+fn base_blob_file_name(repo_date: &RepositoryData, version_parent_id: VersionId) -> &str {
+    repo_date
+        .iter_version_and_ancestors(version_parent_id)
+        .filter_map(|v| match &v.content_blob {
+            ContentBlob::Full { full_blob_file_name } => Some(full_blob_file_name),
+            _ => None,
+        })
+        .next()
+        .expect("There should be a full blob in every branch")
+}
+
+fn patch_ratio(patch_blob_path: &Path, base_blob_path: &Path) -> io::Result<f64> {
+    let patch_blob_length = fs::metadata(patch_blob_path)?.len();
+    let base_blob_length = fs::metadata(base_blob_path)?.len();
+
+    let ratio = patch_blob_length as f64 / base_blob_length as f64;
+
+    Ok(ratio)
+}
+
+fn best_expected_patch_ratio(repo_data: &RepositoryData, version_parent_id: VersionId) -> Option<f64> {
+    let mut best_ratio = None;
+
+    for v in repo_data.iter_version_and_ancestors(version_parent_id) {
+        let ContentBlob::Patch { ratio, .. } = &v.content_blob else {
+            return best_ratio;
+        };
+
+        best_ratio = match best_ratio {
+            None => Some(*ratio),
+            Some(best_ratio) => Some(best_ratio.min(*ratio)),
+        };
+    }
+
+    best_ratio
+}
+
+fn should_create_patch(real_ratio: f64, best_expected_ratio: Option<f64>) -> bool {
+    let Some(best_expected_ratio) = best_expected_ratio else {
+        return true;
+    };
+
+    if real_ratio > 0.9 {
+        return false;
+    }
+
+    real_ratio - best_expected_ratio < 0.5
+}
+
+fn store_version_content(env: &Env, repo_paths: &RepositoryPaths, repo_data: &RepositoryData, version_id: VersionId, parent_id: Option<VersionId>) -> BiverResult<ContentBlob> {
+    let content_blob_file_name = content_blob_file_name(version_id);
+    let content_blob_file_path = repo_paths.file_path(&content_blob_file_name);
+
+    let content_blob = match parent_id {
+        None => ContentBlob::Full {
+            full_blob_file_name: content_blob_file_name,
+        },
+        Some(parent_id) => {
+            let base_blob_file_name = base_blob_file_name(repo_data, parent_id);
+            let base_blob_file_path = repo_paths.file_path(&base_blob_file_name);
+
+            repository_io::store_version_content_patch(env, &content_blob_file_path, &base_blob_file_path, &repo_paths.versioned_file)?;
+
+            let patch_ratio = patch_ratio(&content_blob_file_path, &base_blob_file_path)?;
+            let best_expected_patch_ratio = best_expected_patch_ratio(repo_data, parent_id);
+            let should_create_patch = should_create_patch(patch_ratio, best_expected_patch_ratio);
+
+            let content_blob = if should_create_patch {
+                ContentBlob::Patch {
+                    base_blob_file_name: base_blob_file_name.to_string(),
+                    patch_blob_file_name: content_blob_file_name,
+                    ratio: patch_ratio,
+                }
+            } else {
+                repository_io::store_version_content_full(&content_blob_file_path, &repo_paths.versioned_file)?;
+                ContentBlob::Full {
+                    full_blob_file_name: content_blob_file_name,
+                }
+            };
+
+            content_blob
+        }
+    };
+
+    Ok(content_blob)
 }

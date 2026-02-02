@@ -55,12 +55,25 @@ pub fn store_version_content(env: &Env, repo_paths: &RepositoryPaths, content_bl
         ContentBlob::Patch {
             base_blob_file_name,
             patch_blob_file_name,
+            ..
         } => {
             let patch_blob_file_path = repo_paths.file_path(&patch_blob_file_name);
             let base_blob_file_path = repo_paths.file_path(&base_blob_file_name);
             xdelta3::create_patch(env, &base_blob_file_path, content_to_store_path, &patch_blob_file_path)?;
         }
     }
+
+    Ok(())
+}
+
+pub fn store_version_content_patch(env: &Env, patch_blob_file_path: &Path, base_blob_file_path: &Path, content_to_store_path: &Path) -> io::Result<()> {
+    xdelta3::create_patch(env, &base_blob_file_path, content_to_store_path, &patch_blob_file_path)?;
+
+    Ok(())
+}
+
+pub fn store_version_content_full(full_blob_file_path: &Path, content_to_store_path: &Path) -> io::Result<()> {
+    fs::copy(content_to_store_path, full_blob_file_path)?;
 
     Ok(())
 }
@@ -75,6 +88,7 @@ pub fn extract_version_content(env: &Env, repo_paths: &RepositoryPaths, content_
         ContentBlob::Patch {
             base_blob_file_name,
             patch_blob_file_name,
+            ..
         } => {
             let patch_blob_file_path = repo_paths.file_path(&patch_blob_file_name);
             let base_blob_file_path = repo_paths.file_path(&base_blob_file_name);
@@ -85,10 +99,8 @@ pub fn extract_version_content(env: &Env, repo_paths: &RepositoryPaths, content_
     Ok(())
 }
 
-pub fn store_version_preview(env: &Env, repo_paths: &RepositoryPaths, preview_blob_file_name: &str, content_to_store_path: &Path) -> io::Result<()> {
-    let preview_blob_file_path = repo_paths.file_path(preview_blob_file_name);
-
-    image_magick::create_preview(env, content_to_store_path, preview_blob_file_path.as_path())?;
+pub fn store_version_preview(env: &Env, preview_blob_file_path: &Path, content_to_store_path: &Path) -> io::Result<()> {
+    image_magick::create_preview(env, content_to_store_path, preview_blob_file_path)?;
 
     Ok(())
 }

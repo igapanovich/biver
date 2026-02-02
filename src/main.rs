@@ -2,15 +2,15 @@ use crate::biver_result::{BiverError, BiverErrorSeverity, BiverResult, error, wa
 use crate::command_line_arguments::{Command, CommandLineArguments, DeleteCommand, ListCommand, RenameCommand};
 use crate::env::Env;
 use crate::repository_data::RepositoryData;
+use crate::repository_io::RepositoryDataResult;
 use crate::repository_operations::{
     AmendResult, CheckOutResult, CommitResult, DeleteBranchResult, PreviewResult, RenameBranchResult, ResetResult, RestoreResult, RewordResult, VersionResult,
 };
+use crate::repository_paths::RepositoryPaths;
 use clap::Parser;
 use colored::Colorize;
 use std::io;
 use std::process::ExitCode;
-use crate::repository_io::RepositoryDataResult;
-use crate::repository_paths::RepositoryPaths;
 
 mod biver_result;
 mod command_line_arguments;
@@ -22,12 +22,12 @@ mod image_magick;
 mod known_file_types;
 mod nickname;
 mod repository_data;
+mod repository_io;
 mod repository_operations;
 mod repository_paths;
 mod version_id;
 mod viewer;
 mod xdelta3;
-mod repository_io;
 
 fn main() -> ExitCode {
     let arguments = CommandLineArguments::parse();
@@ -308,7 +308,11 @@ fn run_command(env: &Env, command: Command) -> BiverResult<()> {
         },
 
         Command::Delete(delete_command) => match delete_command {
-            DeleteCommand::Branch { versioned_file_path, confirmed, name } => {
+            DeleteCommand::Branch {
+                versioned_file_path,
+                confirmed,
+                name,
+            } => {
                 let repo_paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
                 let mut repo_data = repository_io::read_data(&repo_paths)?.initialized()?;
 

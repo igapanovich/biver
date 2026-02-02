@@ -93,7 +93,7 @@ impl RepositoryData {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Version {
     pub id: VersionId,
     pub creation_time: DateTime<Utc>,
@@ -104,7 +104,6 @@ pub struct Version {
     pub parent: Option<VersionId>,
     pub content_blob: ContentBlob,
     pub preview_blob_file_name: Option<String>,
-    pub compression: f64
 }
 
 impl Version {
@@ -113,7 +112,7 @@ impl Version {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Head {
     Branch(String),
     Version(VersionId),
@@ -128,19 +127,16 @@ impl Head {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ContentBlob {
-    Full { full_blob_file_name: String },
-    Patch { base_blob_file_name: String, patch_blob_file_name: String },
-}
-
-impl ContentBlob {
-    pub fn own_blob_file_name(&self) -> &str {
-        match self {
-            ContentBlob::Full { full_blob_file_name } => full_blob_file_name,
-            ContentBlob::Patch { patch_blob_file_name, .. } => patch_blob_file_name,
-        }
-    }
+    Full {
+        full_blob_file_name: String,
+    },
+    Patch {
+        base_blob_file_name: String,
+        patch_blob_file_name: String,
+        ratio: f64,
+    },
 }
 
 pub struct VersionAndAncestors<'a> {
