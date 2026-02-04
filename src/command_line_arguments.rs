@@ -28,10 +28,6 @@ pub enum Command {
         all: bool,
     },
 
-    /// List commands
-    #[command(subcommand)]
-    List(ListCommand),
-
     /// Preview a version
     #[command(alias = "pv")]
     Preview {
@@ -55,15 +51,25 @@ pub enum Command {
         target2: Option<String>,
     },
 
+    /// Initialize a new repository
+    Init {
+        #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
+        versioned_file_path: PathBuf,
+
+        /// The initial branch name (default: main)
+        #[arg(short = 'b', long = "branch")]
+        initial_branch_name: Option<String>,
+
+        /// Description of the initial version
+        #[arg(value_name = "INITIAL_VERSION_DESCRIPTION")]
+        initial_version_description: Option<String>,
+    },
+
     /// Commit current changes to a new version
     #[command(alias = "ct")]
     Commit {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
-
-        /// New branch to create
-        #[arg(short = 'b', long = "branch")]
-        branch: Option<String>,
 
         /// Description of the new version
         #[arg(value_name = "DESCRIPTION")]
@@ -146,6 +152,14 @@ pub enum Command {
         target: String,
     },
 
+    /// Create commands
+    #[command(subcommand)]
+    Create(CreateCommand),
+
+    /// List commands
+    #[command(subcommand)]
+    List(ListCommand),
+
     /// Rename commands
     #[command(subcommand)]
     Rename(RenameCommand),
@@ -156,6 +170,21 @@ pub enum Command {
 
     /// List dependencies and check their statuses
     Dependencies,
+}
+
+#[derive(Subcommand)]
+pub enum CreateCommand {
+    Branch {
+        #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
+        versioned_file_path: PathBuf,
+
+        /// Check out the new branch after creation
+        #[arg(short = 'c', long = "checkout")]
+        checkout: bool,
+
+        /// The name of the new branch
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]

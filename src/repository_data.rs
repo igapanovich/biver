@@ -45,11 +45,6 @@ impl RepositoryData {
 
         let all_branches_reference_valid_versions = self.branches.values().all(|branch_version_id| self.versions.iter().any(|v| v.id == *branch_version_id));
 
-        let no_two_branches_reference_the_same_version = {
-            let distinct_branch_values: HashSet<&VersionId> = self.branches.values().collect();
-            self.branches.values().count() == distinct_branch_values.len()
-        };
-
         let all_versions_belong_to_branches = {
             let mut versions_belonging_to_branches = HashSet::new();
 
@@ -64,12 +59,7 @@ impl RepositoryData {
             versions_belonging_to_branches.len() == self.versions.len()
         };
 
-        there_is_exactly_one_root
-            && all_parent_references_are_valid
-            && head_reference_is_valid
-            && all_branches_reference_valid_versions
-            && no_two_branches_reference_the_same_version
-            && all_versions_belong_to_branches
+        there_is_exactly_one_root && all_parent_references_are_valid && head_reference_is_valid && all_branches_reference_valid_versions && all_versions_belong_to_branches
     }
 
     pub fn iter_version_and_ancestors(&'_ self, version_id: VersionId) -> impl Iterator<Item = &'_ Version> {

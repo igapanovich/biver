@@ -1,10 +1,11 @@
 use crate::biver_result::{BiverError, BiverErrorSeverity, BiverResult, error, warning};
-use crate::command_line_arguments::{Command, CommandLineArguments, DeleteCommand, ListCommand, RenameCommand};
+use crate::command_line_arguments::{Command, CommandLineArguments, CreateCommand, DeleteCommand, ListCommand, RenameCommand};
 use crate::env::Env;
 use crate::repository_data::RepositoryData;
 use crate::repository_io::RepositoryDataResult;
 use crate::repository_operations::{
-    AmendResult, CheckOutResult, CommitResult, DeleteBranchResult, PreviewResult, RenameBranchResult, ResetResult, RestoreResult, RewordResult, VersionResult,
+    AmendResult, CheckOutResult, CommitResult, CreateBranchResult, DeleteBranchResult, InitResult, PreviewResult, RenameBranchResult, ResetResult, RestoreResult, RewordResult,
+    VersionResult,
 };
 use crate::repository_paths::RepositoryPaths;
 use clap::Parser;
@@ -75,15 +76,6 @@ fn run_command(env: &Env, command: Command) -> BiverResult<()> {
             success()
         }
 
-        Command::List(ListCommand::Branches { versioned_file_path }) => {
-            let repo_paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let repo_data = repository_io::read_data(&repo_paths)?.initialized()?;
-
-            formatting::print_branch_list(&repo_data);
-
-            success()
-        }
-
         Command::Preview { versioned_file_path, target } => {
             let repo_paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
             let repo_data = repository_io::read_data(&repo_paths)?.initialized()?;
@@ -138,26 +130,32 @@ fn run_command(env: &Env, command: Command) -> BiverResult<()> {
             success()
         }
 
-        Command::Commit {
+        Command::Init {
             versioned_file_path,
-            branch,
-            description,
+            initial_branch_name: branch_name,
+            initial_version_description: description,
         } => {
             let repo_paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let repo_data = repository_io::read_data(&repo_paths)?;
 
-            let result = match repo_data {
-                RepositoryDataResult::NotInitialized => repository_operations::commit_initial_version(env, &repo_paths, branch.as_deref(), description.as_deref())?,
-                RepositoryDataResult::Initialized(mut repo_data) => {
-                    repository_operations::commit_version(env, &repo_paths, &mut repo_data, branch.as_deref(), description.as_deref())?
-                }
-            };
+            let result = repository_operations::init(env, &repo_paths, branch_name.as_deref(), description.as_deref())?;
+
+            match result {
+                InitResult::Ok => success_ok(),
+                InitResult::AlreadyInitialized => warning("Already initialized"),
+                InitResult::InvalidBranchName => error("Invalid branch name"),
+            }
+        }
+
+        Command::Commit { versioned_file_path, description } => {
+            let repo_paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
+            let mut repo_data = repository_io::read_data(&repo_paths)?.initialized()?;
+
+            let result = repository_operations::commit_version(env, &repo_paths, &mut repo_data, description.as_deref())?;
 
             match result {
                 CommitResult::Ok => success_ok(),
                 CommitResult::NothingToCommit => warning("Nothing to commit"),
-                CommitResult::BranchRequired => error("Branch required"),
-                CommitResult::BranchAlreadyExists => error("Branch already exists"),
+                CommitResult::HeadMustBeOnBranch => error("Head must be on a branch"),
             }
         }
 
@@ -266,7 +264,6 @@ fn run_command(env: &Env, command: Command) -> BiverResult<()> {
 
             match result {
                 CheckOutResult::Ok => success_ok(),
-                CheckOutResult::BlockedByUncommittedChanges => error("Cannot check out because there are uncommitted changes"),
                 CheckOutResult::InvalidTarget => error("Invalid target"),
             }
         }
@@ -286,6 +283,32 @@ fn run_command(env: &Env, command: Command) -> BiverResult<()> {
                 RestoreResult::BlockedByUncommittedChanges => error("Cannot restore to the versioned file because there are uncommitted changes"),
                 RestoreResult::InvalidTarget => error("Invalid target"),
             }
+        }
+
+        Command::Create(CreateCommand::Branch {
+            versioned_file_path,
+            checkout,
+            name,
+        }) => {
+            let repo_paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
+            let mut repo_data = repository_io::read_data(&repo_paths)?.initialized()?;
+
+            let result = repository_operations::create_branch(&repo_paths, &mut repo_data, &name, checkout)?;
+
+            match result {
+                CreateBranchResult::Ok => success_ok(),
+                CreateBranchResult::BranchAlreadyExists => error("Branch already exists"),
+                CreateBranchResult::InvalidBranchName => error("Invalid branch name"),
+            }
+        }
+
+        Command::List(ListCommand::Branches { versioned_file_path }) => {
+            let repo_paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
+            let repo_data = repository_io::read_data(&repo_paths)?.initialized()?;
+
+            formatting::print_branch_list(&repo_data);
+
+            success()
         }
 
         Command::Rename(rename_command) => match rename_command {

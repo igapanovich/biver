@@ -82,7 +82,7 @@ mod colorization {
             id: prepared_version.id.bright_black(),
             nickname: prepared_version.nickname.white(),
             head_badge: prepared_version.head_badge.clone().map(|h| h.magenta()),
-            branch_badge: prepared_version.branch_badge.clone().map(|b| b.bright_cyan()),
+            other_branches_here: prepared_version.other_branches_here.clone().map(|b| b.bright_cyan()),
             forking_branches: prepared_version.forking_branches.clone().map(|f| f.bright_cyan()),
             description: prepared_version.description.clone().map(|d| d.green()),
         }
@@ -136,7 +136,7 @@ mod prepared {
         pub id: T,
         pub nickname: T,
         pub head_badge: Option<T>,
-        pub branch_badge: Option<T>,
+        pub other_branches_here: Option<T>,
         pub forking_branches: Option<T>,
         pub description: Option<T>,
     }
@@ -163,9 +163,9 @@ mod prepared {
                 head_badge.fmt(f)?;
             }
 
-            if let Some(branch_badge) = &self.branch_badge {
+            if let Some(other_branches_here) = &self.other_branches_here {
                 fmt_clearance(f)?;
-                branch_badge.fmt(f)?;
+                other_branches_here.fmt(f)?;
             }
 
             if let Some(forking_branches) = &self.forking_branches {
@@ -214,7 +214,10 @@ mod prepared {
                 acc
             });
 
-        let branches_by_version: HashMap<VersionId, String> = repo_data.branches.iter().map(|(branch, version_id)| (version_id.clone(), branch.clone())).collect();
+        let branches_by_version: HashMap<VersionId, Vec<&str>> = repo_data.branches.iter().fold(HashMap::new(), |mut acc, (branch, version_id)| {
+            acc.entry(*version_id).or_insert_with(Vec::new).push(branch);
+            acc
+        });
 
         let limit_from_end = limit_from_end.unwrap_or(versions_to_prepare.len());
         let mut version_count = 0;
@@ -242,11 +245,12 @@ mod prepared {
             let creation_time_local = version.creation_time.with_timezone(&chrono::Local);
             let creation_time_humanized = format!("({})", HumanTime::from(creation_time_local));
 
-            let branch_on_version = branches_by_version.get(&version.id).cloned();
+            let branches_on_version = branches_by_version.get(&version.id);
 
-            if let Some(branch_on_version) = branch_on_version.clone() {
-                forking_branches.retain(|b| b.ne(&branch_on_version));
+            if let Some(branches_on_version) = branches_on_version {
+                forking_branches.retain(|b| !branches_on_version.contains(&b.as_str()));
             }
+
             let forking_branches = if forking_branches.len() > 0 {
                 Some(format!("->[{}]", forking_branches.join(", ")))
             } else {
@@ -265,12 +269,27 @@ mod prepared {
                 None
             };
 
-            let branch_badge = if let Some(branch) = &branch_on_version
-                && branch_on_version.as_deref().ne(&head_branch)
-            {
-                Some(format!("[{}]", branch))
-            } else {
-                None
+            let other_branches_here = match branches_on_version {
+                None => None,
+                Some(branches_on_version) => {
+                    let mut owned_branches_on_version;
+
+                    let branches_on_version = match head_branch {
+                        None => branches_on_version,
+                        Some(head_branch) => {
+                            owned_branches_on_version = branches_on_version.to_vec();
+                            owned_branches_on_version.retain(|b| *b != head_branch);
+                            &owned_branches_on_version
+                        }
+                    };
+
+                    if branches_on_version.len() == 0{
+                        None
+                    }
+                    else {
+                        Some(format!("[{}]", branches_on_version.join(", ")))
+                    }
+                }
             };
 
             max_nickname_length = max_nickname_length.max(version.nickname.len());
@@ -282,7 +301,7 @@ mod prepared {
                 id: version.id.bs58(),
                 nickname: version.nickname.clone(),
                 head_badge,
-                branch_badge,
+                other_branches_here,
                 forking_branches,
                 description: if version.description.len() > 0 { Some(version.description.to_string()) } else { None },
             });

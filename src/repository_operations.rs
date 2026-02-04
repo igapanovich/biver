@@ -4,7 +4,7 @@ use crate::extensions::CountIsAtLeast;
 use crate::repository_data::{ContentBlob, Head, RepositoryData, Version};
 use crate::repository_paths::RepositoryPaths;
 use crate::version_id::VersionId;
-use crate::{biver_result, hash, image_magick, known_file_types, nickname, repository_io, xdelta3};
+use crate::{hash, image_magick, known_file_types, nickname, repository_io, xdelta3};
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -14,18 +14,19 @@ use std::{fs, io};
 
 const DEFAULT_BRANCH: &str = "main";
 
-pub enum CommitResult {
+pub enum InitResult {
     Ok,
-    NothingToCommit,
-    BranchRequired,
-    BranchAlreadyExists,
+    AlreadyInitialized,
+    InvalidBranchName,
 }
 
-pub fn commit_initial_version(env: &Env, repo_paths: &RepositoryPaths, branch: Option<&str>, description: Option<&str>) -> BiverResult<CommitResult> {
+pub fn init(env: &Env, repo_paths: &RepositoryPaths, branch: Option<&str>, description: Option<&str>) -> BiverResult<InitResult> {
+    if fs::exists(&repo_paths.data_file)? {
+        return Ok(InitResult::AlreadyInitialized);
+    }
+
     if !fs::exists(&repo_paths.repository_dir)? {
         fs::create_dir(&repo_paths.repository_dir)?;
-    } else if fs::exists(&repo_paths.data_file)? {
-        return biver_result::error("The data file already exists.");
     }
 
     let versioned_file = File::open(&repo_paths.versioned_file)?;
@@ -35,6 +36,10 @@ pub fn commit_initial_version(env: &Env, repo_paths: &RepositoryPaths, branch: O
     let new_version_id = VersionId::new();
 
     let branch = branch.unwrap_or(DEFAULT_BRANCH);
+
+    if !valid_branch_name(branch) {
+        return Ok(InitResult::InvalidBranchName);
+    }
 
     let content_blob_file_name = content_blob_file_name(new_version_id);
     let content_blob_file_path = repo_paths.file_path(&content_blob_file_name);
@@ -68,10 +73,16 @@ pub fn commit_initial_version(env: &Env, repo_paths: &RepositoryPaths, branch: O
     repository_io::store_version_content_full(&content_blob_file_path, &repo_paths.versioned_file)?;
     repository_io::write_data(repo_paths, &repo_data)?;
 
-    Ok(CommitResult::Ok)
+    Ok(InitResult::Ok)
 }
 
-pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut RepositoryData, new_branch: Option<&str>, description: Option<&str>) -> BiverResult<CommitResult> {
+pub enum CommitResult {
+    Ok,
+    NothingToCommit,
+    HeadMustBeOnBranch,
+}
+
+pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut RepositoryData, description: Option<&str>) -> BiverResult<CommitResult> {
     let versioned_file = File::open(&repo_paths.versioned_file)?;
     let versioned_file_xxh3_128 = hash::xxh3_128(&versioned_file)?;
     let versioned_file_length = fs::metadata(&repo_paths.versioned_file)?.len();
@@ -82,16 +93,8 @@ pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut R
         return Ok(CommitResult::NothingToCommit);
     }
 
-    if let Some(new_branch) = new_branch
-        && repo_data.branches.contains_key(new_branch)
-    {
-        return Ok(CommitResult::BranchAlreadyExists);
-    }
-
-    let branch = match (new_branch, repo_data.head.branch()) {
-        (Some(new_branch), _) => new_branch.to_string(),
-        (None, Some(branch)) => branch.to_string(),
-        (None, None) => return Ok(CommitResult::BranchRequired),
+    let Some(branch) = repo_data.head.branch() else {
+        return Ok(CommitResult::HeadMustBeOnBranch);
     };
 
     let new_version_id = VersionId::new();
@@ -113,7 +116,6 @@ pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut R
         preview_blob_file_name,
     };
 
-    repo_data.head = Head::Branch(branch.to_string());
     repo_data.versions.push(new_version);
     repo_data.branches.insert(branch.to_string(), new_version_id);
 
@@ -277,16 +279,11 @@ pub fn reset(repo_paths: &RepositoryPaths, repo_data: &mut RepositoryData, targe
 
 pub enum CheckOutResult {
     Ok,
-    BlockedByUncommittedChanges,
     InvalidTarget,
 }
 
 pub fn check_out(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut RepositoryData, target: &str) -> BiverResult<CheckOutResult> {
     let has_uncommitted_changes = has_uncommitted_changes(repo_paths, repo_data)?;
-
-    if has_uncommitted_changes {
-        return Ok(CheckOutResult::BlockedByUncommittedChanges);
-    }
 
     let new_head = match resolve_target(repo_data, target) {
         TargetResult::Invalid => return Ok(CheckOutResult::InvalidTarget),
@@ -298,7 +295,10 @@ pub fn check_out(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut Reposi
     let new_head_version = repo_data.head_version();
 
     repository_io::write_data(repo_paths, repo_data)?;
-    repository_io::extract_version_content(env, repo_paths, &new_head_version.content_blob, &repo_paths.versioned_file)?;
+
+    if !has_uncommitted_changes {
+        repository_io::extract_version_content(env, repo_paths, &new_head_version.content_blob, &repo_paths.versioned_file)?;
+    }
 
     Ok(CheckOutResult::Ok)
 }
@@ -354,6 +354,34 @@ pub fn preview(repo_paths: &RepositoryPaths, version: &Version) -> PreviewResult
         None => PreviewResult::NoPreviewAvailable,
         Some(preview_file_name) => PreviewResult::Ok(repo_paths.file_path(preview_file_name)),
     }
+}
+
+pub enum CreateBranchResult {
+    Ok,
+    BranchAlreadyExists,
+    InvalidBranchName,
+}
+
+pub fn create_branch(repo_paths: &RepositoryPaths, repo_data: &mut RepositoryData, name: &str, checkout: bool) -> BiverResult<CreateBranchResult> {
+    if repo_data.branches.contains_key(name) {
+        return Ok(CreateBranchResult::BranchAlreadyExists);
+    }
+
+    if !valid_branch_name(name) {
+        return Ok(CreateBranchResult::InvalidBranchName);
+    }
+
+    let head_version_id = repo_data.head_version().id;
+
+    repo_data.branches.insert(name.to_string(), head_version_id);
+
+    if checkout {
+        repo_data.head = Head::Branch(name.to_string());
+    }
+
+    repository_io::write_data(repo_paths, repo_data)?;
+
+    Ok(CreateBranchResult::Ok)
 }
 
 pub enum RenameBranchResult {
@@ -672,4 +700,8 @@ fn store_version_content(env: &Env, repo_paths: &RepositoryPaths, repo_data: &Re
     };
 
     Ok(content_blob)
+}
+
+fn valid_branch_name(branch_name: &str) -> bool {
+    branch_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
