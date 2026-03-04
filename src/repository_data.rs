@@ -92,7 +92,8 @@ pub struct Version {
     pub versioned_file_xxh3_128: u128,
     pub description: String,
     pub parent: Option<VersionId>,
-    pub content_blob: ContentBlob,
+    pub content_blob_file_name: String,
+    pub content_blob_kind: ContentBlobKind,
     pub preview_blob_file_name: Option<String>,
 }
 
@@ -117,16 +118,19 @@ impl Head {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ContentBlob {
-    Full {
-        full_blob_file_name: String,
-    },
-    Patch {
-        base_blob_file_name: String,
-        patch_blob_file_name: String,
-        ratio: f64,
-    },
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum ContentBlobKind {
+    Full,
+    Patch,
+}
+
+impl ContentBlobKind {
+    pub fn is_patch(&self) -> bool {
+        matches!(self, ContentBlobKind::Patch)
+    }
+    pub fn is_full(&self) -> bool {
+        matches!(self, ContentBlobKind::Full)
+    }
 }
 
 pub struct VersionAndAncestors<'a> {

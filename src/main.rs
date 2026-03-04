@@ -18,6 +18,7 @@ mod command_line_arguments;
 mod env;
 mod extensions;
 mod formatting;
+mod fs;
 mod hash;
 mod image_magick;
 mod known_file_types;

@@ -1,6 +1,7 @@
 use crate::env::Env;
-use crate::repository_data::{ContentBlob, RepositoryData};
+use crate::repository_data::{ContentBlobKind, RepositoryData};
 use crate::repository_paths::RepositoryPaths;
+use crate::version_id::VersionId;
 use crate::{image_magick, xdelta3};
 use std::path::Path;
 use std::time::{Duration, SystemTime};
@@ -45,54 +46,44 @@ pub fn write_data(paths: &RepositoryPaths, data: &RepositoryData) -> io::Result<
     Ok(())
 }
 
-pub fn store_version_content(env: &Env, repo_paths: &RepositoryPaths, content_blob: &ContentBlob, content_to_store_path: &Path) -> io::Result<()> {
-    match content_blob {
-        ContentBlob::Full { full_blob_file_name } => {
-            let full_blob_file_path = repo_paths.file_path(&full_blob_file_name);
-            fs::copy(content_to_store_path, full_blob_file_path)?;
-        }
-
-        ContentBlob::Patch {
-            base_blob_file_name,
-            patch_blob_file_name,
-            ..
-        } => {
-            let patch_blob_file_path = repo_paths.file_path(&patch_blob_file_name);
-            let base_blob_file_path = repo_paths.file_path(&base_blob_file_name);
-            xdelta3::create_patch(env, &base_blob_file_path, content_to_store_path, &patch_blob_file_path)?;
-        }
-    }
-
-    Ok(())
-}
-
-pub fn store_version_content_patch(env: &Env, patch_blob_file_path: &Path, base_blob_file_path: &Path, content_to_store_path: &Path) -> io::Result<()> {
+pub fn store_version_content_patch(env: &Env, base_blob_file_path: &Path, content_to_store_path: &Path, patch_blob_file_path: &Path) -> io::Result<()> {
     xdelta3::create_patch(env, &base_blob_file_path, content_to_store_path, &patch_blob_file_path)?;
 
     Ok(())
 }
 
-pub fn store_version_content_full(full_blob_file_path: &Path, content_to_store_path: &Path) -> io::Result<()> {
+pub fn store_version_content_full(content_to_store_path: &Path, full_blob_file_path: &Path) -> io::Result<()> {
     fs::copy(content_to_store_path, full_blob_file_path)?;
 
     Ok(())
 }
 
-pub fn extract_version_content(env: &Env, repo_paths: &RepositoryPaths, content_blob: &ContentBlob, destination_path: &Path) -> io::Result<()> {
-    match content_blob {
-        ContentBlob::Full { full_blob_file_name } => {
-            let full_blob_file_path = repo_paths.file_path(&full_blob_file_name);
-            fs::copy(&full_blob_file_path, destination_path)?;
-        }
+pub fn extract_version_content(env: &Env, repo_paths: &RepositoryPaths, repo_data: &RepositoryData, version_id: VersionId, destination_path: &Path) -> io::Result<()> {
+    let mut chain = vec![];
 
-        ContentBlob::Patch {
-            base_blob_file_name,
-            patch_blob_file_name,
-            ..
-        } => {
-            let patch_blob_file_path = repo_paths.file_path(&patch_blob_file_name);
-            let base_blob_file_path = repo_paths.file_path(&base_blob_file_name);
-            xdelta3::apply_patch(env, &base_blob_file_path, &patch_blob_file_path, destination_path)?;
+    for version in repo_data.iter_version_and_ancestors(version_id) {
+        chain.push(version);
+        if version.content_blob_kind.is_full() {
+            break;
+        }
+    }
+
+    chain.reverse();
+
+    let temp_file_name = crate::fs::random_file_name();
+    let temp_file_path = repo_paths.file_path(&temp_file_name);
+
+    for version in chain {
+        let blob_file_path = repo_paths.file_path(&version.content_blob_file_name);
+
+        match version.content_blob_kind {
+            ContentBlobKind::Full => {
+                fs::copy(&blob_file_path, destination_path)?;
+            }
+            ContentBlobKind::Patch => {
+                xdelta3::apply_patch(env, destination_path, &blob_file_path, &temp_file_path)?;
+                fs::rename(&temp_file_path, destination_path)?;
+            }
         }
     }
 

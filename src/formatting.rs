@@ -283,10 +283,9 @@ mod prepared {
                         }
                     };
 
-                    if branches_on_version.len() == 0{
+                    if branches_on_version.len() == 0 {
                         None
-                    }
-                    else {
+                    } else {
                         Some(format!("[{}]", branches_on_version.join(", ")))
                     }
                 }
