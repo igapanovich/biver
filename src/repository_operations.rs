@@ -14,8 +14,6 @@ use std::str::FromStr;
 
 const DEFAULT_BRANCH: &str = "main";
 
-const MAX_CONSECUTIVE_PATCHES: usize = 19;
-
 pub enum InitResult {
     Ok,
     AlreadyInitialized,
@@ -101,14 +99,25 @@ pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut R
 
     let new_version_id = VersionId::new();
 
-    let should_create_full_blob = repo_data
-        .iter_version_and_ancestors(parent_id)
-        .take_while(|v| v.content_blob_kind.is_patch())
-        .count_is_at_least(MAX_CONSECUTIVE_PATCHES);
-    let content_blob_kind = if should_create_full_blob { ContentBlobKind::Full } else { ContentBlobKind::Patch };
-
     let content_blob_file_name = content_blob_file_name(new_version_id);
     let content_blob_file_path = repo_paths.file_path(&content_blob_file_name);
+
+    let parent_version_file_name = crate::fs::random_file_name();
+    let parent_version_file_path = repo_paths.file_path(&parent_version_file_name);
+    repository_io::extract_version_content(env, repo_paths, repo_data, parent_id, &parent_version_file_path)?;
+    repository_io::store_version_content_patch(env, &parent_version_file_path, &repo_paths.versioned_file, &content_blob_file_path)?;
+    fs::remove_file(&parent_version_file_path)?;
+
+    let patch_length = fs::metadata(&content_blob_file_path)?.len();
+
+    let content_blob_kind;
+
+    if should_convert_patch_to_full(repo_paths, repo_data, parent_id, patch_length)? {
+        content_blob_kind = ContentBlobKind::Full;
+        repository_io::store_version_content_full(&repo_paths.versioned_file, &content_blob_file_path)?;
+    } else {
+        content_blob_kind = ContentBlobKind::Patch;
+    }
 
     let preview_blob_file_name = preview_blob_file_name(env, repo_paths, new_version_id);
     let preview_blob_file_path = preview_blob_file_name.as_ref().map(|n| repo_paths.file_path(n));
@@ -654,4 +663,18 @@ fn can_create_preview(env: &Env, repo_paths: &RepositoryPaths) -> bool {
 
 fn valid_branch_name(branch_name: &str) -> bool {
     branch_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+fn should_convert_patch_to_full(repo_paths: &RepositoryPaths, repo_data: &RepositoryData, parent_id: VersionId, new_patch_length: u64) -> BiverResult<bool> {
+    let versioned_file_length = fs::metadata(&repo_paths.versioned_file)?.len();
+
+    let mut patch_chain_length = new_patch_length;
+
+    let preceding_patch_chain = repo_data.iter_version_and_ancestors(parent_id).take_while(|v| v.content_blob_kind.is_patch());
+
+    for patch_version in preceding_patch_chain {
+        patch_chain_length += fs::metadata(repo_paths.file_path(&patch_version.content_blob_file_name))?.len();
+    }
+
+    Ok(patch_chain_length > (versioned_file_length * 0.65 as u64))
 }
