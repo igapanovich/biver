@@ -4,7 +4,7 @@ use crate::extensions::CountIsAtLeast;
 use crate::repository_data::{ContentBlobKind, Head, RepositoryData, Version};
 use crate::repository_paths::RepositoryPaths;
 use crate::version_id::VersionId;
-use crate::{hash, image_magick, known_file_types, nickname, repository_io};
+use crate::{hash, image_magick, known_file_types, nickname, repository_io, temp_file};
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -102,8 +102,7 @@ pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut R
     let content_blob_file_name = content_blob_file_name(new_version_id);
     let content_blob_file_path = repo_paths.file_path(&content_blob_file_name);
 
-    let parent_version_file_name = crate::fs::random_file_name();
-    let parent_version_file_path = repo_paths.file_path(&parent_version_file_name);
+    let parent_version_file_path = temp_file::path();
     repository_io::extract_version_content(env, repo_paths, repo_data, parent_id, &parent_version_file_path)?;
     repository_io::store_version_content_patch(env, &parent_version_file_path, &repo_paths.versioned_file, &content_blob_file_path)?;
     fs::remove_file(&parent_version_file_path)?;
@@ -143,8 +142,7 @@ pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut R
             repository_io::store_version_content_full(&repo_paths.versioned_file, &content_blob_file_path)?;
         }
         ContentBlobKind::Patch => {
-            let parent_version_file_name = crate::fs::random_file_name();
-            let parent_version_file_path = repo_paths.file_path(&parent_version_file_name);
+            let parent_version_file_path = temp_file::path();
             repository_io::extract_version_content(env, repo_paths, repo_data, parent_id, &parent_version_file_path)?;
             repository_io::store_version_content_patch(env, &parent_version_file_path, &repo_paths.versioned_file, &content_blob_file_path)?;
             fs::remove_file(&parent_version_file_path)?;
@@ -230,8 +228,7 @@ pub fn amend_head(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut Repos
             repository_io::store_version_content_full(&repo_paths.versioned_file, &content_blob_file_path)?;
         }
         ContentBlobKind::Patch => {
-            let parent_version_file_name = crate::fs::random_file_name();
-            let parent_version_file_path = repo_paths.file_path(&parent_version_file_name);
+            let parent_version_file_path = temp_file::path();
             let parent_id = parent_id.expect("Patch node must have a parent");
             repository_io::extract_version_content(env, repo_paths, repo_data, parent_id, &parent_version_file_path)?;
             repository_io::store_version_content_patch(env, &parent_version_file_path, &repo_paths.versioned_file, &content_blob_file_path)?;

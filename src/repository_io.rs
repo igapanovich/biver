@@ -2,7 +2,7 @@ use crate::env::Env;
 use crate::repository_data::{ContentBlobKind, RepositoryData};
 use crate::repository_paths::RepositoryPaths;
 use crate::version_id::VersionId;
-use crate::{image_magick, xdelta3};
+use crate::{image_magick, temp_file, xdelta3};
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 use std::{fs, io};
@@ -70,8 +70,7 @@ pub fn extract_version_content(env: &Env, repo_paths: &RepositoryPaths, repo_dat
 
     chain.reverse();
 
-    let temp_file_name = crate::fs::random_file_name();
-    let temp_file_path = repo_paths.file_path(&temp_file_name);
+    let temp_file_path = temp_file::path();
 
     for version in chain {
         let blob_file_path = repo_paths.file_path(&version.content_blob_file_name);
