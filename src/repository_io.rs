@@ -70,7 +70,9 @@ pub fn extract_version_content(env: &Env, repo_paths: &RepositoryPaths, repo_dat
 
     chain.reverse();
 
-    let temp_file_path = temp_file::path();
+    if let Some(destination_path_parent) = destination_path.parent() {
+        fs::create_dir_all(destination_path_parent)?;
+    }
 
     for version in chain {
         let blob_file_path = repo_paths.file_path(&version.content_blob_file_name);
@@ -80,8 +82,10 @@ pub fn extract_version_content(env: &Env, repo_paths: &RepositoryPaths, repo_dat
                 fs::copy(&blob_file_path, destination_path)?;
             }
             ContentBlobKind::Patch => {
+                let temp_file_path = temp_file::path();
                 xdelta3::apply_patch(env, destination_path, &blob_file_path, &temp_file_path)?;
-                fs::rename(&temp_file_path, destination_path)?;
+                fs::copy(&temp_file_path, destination_path)?;
+                fs::remove_file(&temp_file_path)?;
             }
         }
     }
