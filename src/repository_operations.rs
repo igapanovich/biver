@@ -664,5 +664,7 @@ fn should_convert_patch_to_full(repo_paths: &RepositoryPaths, repo_data: &Reposi
         patch_chain_length += fs::metadata(repo_paths.file_path(&patch_version.content_blob_file_name))?.len();
     }
 
-    Ok(patch_chain_length > (versioned_file_length * 0.65 as u64))
+    let threshold = versioned_file_length as f64 * 0.65;
+
+    Ok(patch_chain_length > threshold as u64)
 }
