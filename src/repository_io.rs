@@ -24,9 +24,7 @@ pub fn read_data(repository_paths: &RepositoryPaths) -> io::Result<RepositoryDat
 }
 
 pub fn write_data(paths: &RepositoryPaths, data: &RepositoryData) -> io::Result<()> {
-    if !data.valid() {
-        panic!("Repository data is not valid: {:#?}", data);
-    }
+    assert!(data.valid(), "Repository data is not valid: {:#?}", data);
 
     let backup1 = paths.file_path("data_backup1.json");
     let backup2 = paths.file_path("data_backup2.json");
