@@ -47,6 +47,10 @@ pub fn write_data(paths: &RepositoryPaths, data: &RepositoryData) -> io::Result<
 }
 
 pub fn store_version_content_patch(env: &Env, base_blob_file_path: &Path, content_to_store_path: &Path, patch_blob_file_path: &Path) -> io::Result<()> {
+    if fs::exists(patch_blob_file_path)? {
+        fs::remove_file(patch_blob_file_path)?;
+    }
+
     xdelta3::create_patch(env, &base_blob_file_path, content_to_store_path, &patch_blob_file_path)?;
 
     Ok(())
