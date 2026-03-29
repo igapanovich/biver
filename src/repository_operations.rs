@@ -137,18 +137,6 @@ pub fn commit_version(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut R
     repo_data.versions.push(new_version);
     repo_data.branches.insert(branch.to_string(), new_version_id);
 
-    match content_blob_kind {
-        ContentBlobKind::Full => {
-            repository_io::store_version_content_full(&repo_paths.versioned_file, &content_blob_file_path)?;
-        }
-        ContentBlobKind::Patch => {
-            let parent_version_file_path = temp_file::path();
-            repository_io::extract_version_content(env, repo_paths, repo_data, parent_id, &parent_version_file_path)?;
-            repository_io::store_version_content_patch(env, &parent_version_file_path, &repo_paths.versioned_file, &content_blob_file_path)?;
-            fs::remove_file(&parent_version_file_path)?;
-        }
-    }
-
     if let Some(preview_blob_file_path) = preview_blob_file_path {
         repository_io::store_version_preview(env, &preview_blob_file_path, &repo_paths.versioned_file)?;
     }
