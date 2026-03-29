@@ -175,6 +175,7 @@ pub fn amend_head(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut Repos
 
     let head = repo_data.head_version();
     let head_id = head.id;
+    let parent_id = head.parent;
 
     if versioned_file_xxh3_128 == head.versioned_file_xxh3_128 {
         return Ok(AmendResult::NoUncommittedChanges);
@@ -188,7 +189,7 @@ pub fn amend_head(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut Repos
         return Ok(AmendResult::CannotAmendParent);
     }
 
-    if let Some(parent_id) = head.parent
+    if let Some(parent_id) = parent_id
         && repo_data.version(parent_id).unwrap().versioned_file_xxh3_128 == versioned_file_xxh3_128
     {
         return Ok(AmendResult::HeadEqualsParent);
@@ -214,7 +215,7 @@ pub fn amend_head(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut Repos
         versioned_file_length,
         versioned_file_xxh3_128,
         description,
-        parent: head.parent,
+        parent: parent_id,
         content_blob_file_name: head.content_blob_file_name.clone(),
         content_blob_kind,
         preview_blob_file_name,
@@ -231,6 +232,8 @@ pub fn amend_head(env: &Env, repo_paths: &RepositoryPaths, repo_data: &mut Repos
         ContentBlobKind::Patch => {
             let parent_version_file_name = crate::fs::random_file_name();
             let parent_version_file_path = repo_paths.file_path(&parent_version_file_name);
+            let parent_id = parent_id.expect("Patch node must have a parent");
+            repository_io::extract_version_content(env, repo_paths, repo_data, parent_id, &parent_version_file_path)?;
             repository_io::store_version_content_patch(env, &parent_version_file_path, &repo_paths.versioned_file, &content_blob_file_path)?;
             fs::remove_file(&parent_version_file_path)?;
         }
