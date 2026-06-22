@@ -650,7 +650,7 @@ fn can_create_preview(env: &Env, repo_paths: &RepositoryPaths) -> bool {
 }
 
 fn valid_branch_name(branch_name: &str) -> bool {
-    branch_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    branch_name.len() > 0 && branch_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 fn should_convert_patch_to_full(repo_paths: &RepositoryPaths, repo_data: &RepositoryData, parent_id: VersionId, new_patch_length: u64) -> BiverResult<bool> {
