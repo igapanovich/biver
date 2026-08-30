@@ -1,3 +1,4 @@
+use crate::data::Version;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -31,5 +32,12 @@ impl RepositoryPaths {
 
     pub fn file_path(&self, file_name: &str) -> PathBuf {
         self.repository_dir.join(&file_name)
+    }
+
+    pub fn preview_path(&self, version: &Version) -> Option<PathBuf> {
+        version
+            .preview_blob_file_name
+            .as_ref()
+            .map(|file_name| self.file_path(&file_name))
     }
 }

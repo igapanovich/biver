@@ -1,14 +1,22 @@
-use crate::repository_data::{RepositoryData, Version};
-use colored::{ColoredString, Colorize};
+use biver_core::data::{Repository, Version};
 
 const MAX_VERSIONS_TO_PRINT: usize = 20;
 
-pub fn print_repository_data(repo_data: &RepositoryData, has_uncommitted_changes: bool, all: bool) {
-    let limit = if all { None } else { Some(MAX_VERSIONS_TO_PRINT) };
+pub fn print_repository_data(repo_data: &Repository, has_uncommitted_changes: bool, all: bool) {
+    let limit = if all {
+        None
+    } else {
+        Some(MAX_VERSIONS_TO_PRINT)
+    };
 
     let versions_to_print: Vec<_> = repo_data.iter_head_and_ancestors().collect();
 
-    let prepared = prepared::prepare(repo_data, &versions_to_print, has_uncommitted_changes, limit);
+    let prepared = prepared::prepare(
+        repo_data,
+        &versions_to_print,
+        has_uncommitted_changes,
+        limit,
+    );
     let prepared = colorization::colorize_prepared(&prepared);
 
     if let Some(off_screen_info) = &prepared.off_screen_info {
@@ -24,80 +32,85 @@ pub fn print_repository_data(repo_data: &RepositoryData, has_uncommitted_changes
     }
 }
 
-pub fn format_versions(repo_data: &RepositoryData, versions: &[&Version]) -> Vec<String> {
+pub fn format_versions(repo_data: &Repository, versions: &[&Version]) -> Vec<String> {
     let prepared = prepared::prepare(repo_data, versions, false, None);
     prepared.versions.iter().map(|v| v.to_string()).collect()
 }
 
-pub fn print_dependencies(xdelta3_ready: bool, image_magick_ready: bool) {
-    fn optional_dep_status(ready: bool) -> ColoredString {
-        if ready { "ready".green() } else { "not found".yellow() }
-    }
-
-    println!(
-        "{:<14}{:<10}{}",
-        "xdelta3",
-        optional_dep_status(xdelta3_ready),
-        "(Optional) Used for storing version file content as patches, which reduces repository size on disk"
-    );
-    println!(
-        "{:<14}{:<10}{}",
-        "ImageMagick",
-        optional_dep_status(image_magick_ready),
-        "(Optional) Used for creating version previews for image files"
-    );
-}
-
-pub fn print_branch_list(repo_data: &RepositoryData) {
+pub fn print_branch_list(repo_data: &Repository) {
     for branch in repo_data.branches.keys() {
         println!("{}", branch)
     }
 }
 
 mod colorization {
-    use crate::formatting::prepared::{Prepared, PreparedOffScreen, PreparedUncommitedChanges, PreparedVersion};
+    use crate::formatting::prepared::{
+        Prepared, PreparedOffScreen, PreparedUncommitedChanges, PreparedVersion,
+    };
     use colored::{ColoredString, Colorize};
 
     pub fn colorize_prepared(prepared: &Prepared<String>) -> Prepared<ColoredString> {
         Prepared {
-            off_screen_info: prepared.off_screen_info.as_ref().map(colorize_off_screen_info),
+            off_screen_info: prepared
+                .off_screen_info
+                .as_ref()
+                .map(colorize_off_screen_info),
             versions: prepared.versions.iter().map(colorize_version).collect(),
-            uncommitted_changes: prepared.uncommitted_changes.as_ref().map(colorize_uncommitted_changes),
+            uncommitted_changes: prepared
+                .uncommitted_changes
+                .as_ref()
+                .map(colorize_uncommitted_changes),
         }
     }
 
-    pub fn colorize_off_screen_info(prepared_off_screen_info: &PreparedOffScreen<String>) -> PreparedOffScreen<ColoredString> {
+    pub fn colorize_off_screen_info(
+        prepared_off_screen_info: &PreparedOffScreen<String>,
+    ) -> PreparedOffScreen<ColoredString> {
         PreparedOffScreen {
             more_versions_text_offset: prepared_off_screen_info.more_versions_text_offset,
             more_versions_text: prepared_off_screen_info.more_versions_text.bright_black(),
             forking_branches_offset: prepared_off_screen_info.forking_branches_offset,
-            forking_branches: prepared_off_screen_info.forking_branches.clone().map(|f| f.bright_cyan()),
+            forking_branches: prepared_off_screen_info
+                .forking_branches
+                .clone()
+                .map(|f| f.bright_cyan()),
         }
     }
 
-    pub fn colorize_version(prepared_version: &PreparedVersion<String>) -> PreparedVersion<ColoredString> {
+    pub fn colorize_version(
+        prepared_version: &PreparedVersion<String>,
+    ) -> PreparedVersion<ColoredString> {
         PreparedVersion {
             creation_time: prepared_version.creation_time.blue(),
             creation_time_humanized: prepared_version.creation_time_humanized.bright_blue(),
             id: prepared_version.id.bright_black(),
             nickname: prepared_version.nickname.white(),
             head_badge: prepared_version.head_badge.clone().map(|h| h.magenta()),
-            other_branches_here: prepared_version.other_branches_here.clone().map(|b| b.bright_cyan()),
-            forking_branches: prepared_version.forking_branches.clone().map(|f| f.bright_cyan()),
+            other_branches_here: prepared_version
+                .other_branches_here
+                .clone()
+                .map(|b| b.bright_cyan()),
+            forking_branches: prepared_version
+                .forking_branches
+                .clone()
+                .map(|f| f.bright_cyan()),
             description: prepared_version.description.clone().map(|d| d.green()),
         }
     }
 
-    pub fn colorize_uncommitted_changes(prepared_uncommitted_changes: &PreparedUncommitedChanges<String>) -> PreparedUncommitedChanges<ColoredString> {
+    pub fn colorize_uncommitted_changes(
+        prepared_uncommitted_changes: &PreparedUncommitedChanges<String>,
+    ) -> PreparedUncommitedChanges<ColoredString> {
         PreparedUncommitedChanges {
-            uncommitted_changes_text: prepared_uncommitted_changes.uncommitted_changes_text.yellow(),
+            uncommitted_changes_text: prepared_uncommitted_changes
+                .uncommitted_changes_text
+                .yellow(),
         }
     }
 }
 
 mod prepared {
-    use crate::repository_data::{RepositoryData, Version};
-    use crate::version_id::VersionId;
+    use biver_core::data::{Repository, Version, VersionId};
     use chrono_humanize::HumanTime;
     use std::collections::{HashMap, HashSet};
     use std::fmt;
@@ -118,7 +131,12 @@ mod prepared {
 
     impl<T: Display> Display for PreparedOffScreen<T> {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            write!(f, "{:>offset$}", "", offset = self.more_versions_text_offset)?;
+            write!(
+                f,
+                "{:>offset$}",
+                "",
+                offset = self.more_versions_text_offset
+            )?;
             self.more_versions_text.fmt(f)?;
 
             if let Some(forking_branches) = &self.forking_branches {
@@ -192,10 +210,16 @@ mod prepared {
         }
     }
 
-    pub fn prepare(repo_data: &RepositoryData, versions_to_prepare: &[&Version], has_uncommitted_changes: bool, limit_from_end: Option<usize>) -> Prepared<String> {
+    pub fn prepare(
+        repo_data: &Repository,
+        versions_to_prepare: &[&Version],
+        has_uncommitted_changes: bool,
+        limit_from_end: Option<usize>,
+    ) -> Prepared<String> {
         let mut prepared_versions = Vec::new();
 
-        let head_version_ids: Vec<VersionId> = repo_data.iter_head_and_ancestors().map(|v| v.id).collect();
+        let head_version_ids: Vec<VersionId> =
+            repo_data.iter_head_and_ancestors().map(|v| v.id).collect();
 
         let branches_forking_at_version_id: HashMap<VersionId, Vec<String>> = repo_data
             .branches
@@ -214,10 +238,14 @@ mod prepared {
                 acc
             });
 
-        let branches_by_version: HashMap<VersionId, Vec<&str>> = repo_data.branches.iter().fold(HashMap::new(), |mut acc, (branch, version_id)| {
-            acc.entry(*version_id).or_insert_with(Vec::new).push(branch);
-            acc
-        });
+        let branches_by_version: HashMap<VersionId, Vec<&str>> =
+            repo_data
+                .branches
+                .iter()
+                .fold(HashMap::new(), |mut acc, (branch, version_id)| {
+                    acc.entry(*version_id).or_insert_with(Vec::new).push(branch);
+                    acc
+                });
 
         let limit_from_end = limit_from_end.unwrap_or(versions_to_prepare.len());
         let mut version_count = 0;
@@ -292,7 +320,8 @@ mod prepared {
             };
 
             max_nickname_length = max_nickname_length.max(version.nickname.len());
-            max_creation_time_humanized_length = max_creation_time_humanized_length.max(creation_time_humanized.len());
+            max_creation_time_humanized_length =
+                max_creation_time_humanized_length.max(creation_time_humanized.len());
 
             prepared_versions.push(PreparedVersion {
                 creation_time: creation_time_local.format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -302,13 +331,20 @@ mod prepared {
                 head_badge,
                 other_branches_here,
                 forking_branches,
-                description: if version.description.len() > 0 { Some(version.description.to_string()) } else { None },
+                description: if version.description.len() > 0 {
+                    Some(version.description.to_string())
+                } else {
+                    None
+                },
             });
         }
 
         for version in &mut prepared_versions {
             version.nickname = format!("{:>max_nickname_length$}", version.nickname);
-            version.creation_time_humanized = format!("{:<max_creation_time_humanized_length$}", version.creation_time_humanized);
+            version.creation_time_humanized = format!(
+                "{:<max_creation_time_humanized_length$}",
+                version.creation_time_humanized
+            );
         }
 
         let total_version_count = versions_to_prepare.len();
@@ -327,12 +363,20 @@ mod prepared {
             let more_versions_text = format!("...{} more versions", off_screen_version_count);
 
             let more_versions_slot_length = 23 + max_nickname_length;
-            let forking_branches_offset = more_versions_slot_length - more_versions_text.len().min(more_versions_slot_length) + 1;
+            let forking_branches_offset = more_versions_slot_length
+                - more_versions_text.len().min(more_versions_slot_length)
+                + 1;
 
             let forking_branches = if off_screen_branches.len() == 0 {
                 None
             } else {
-                Some(format!("->[{}]", off_screen_branches.into_iter().collect::<Vec<_>>().join(", ")))
+                Some(format!(
+                    "->[{}]",
+                    off_screen_branches
+                        .into_iter()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
             };
 
             Some(PreparedOffScreen {
@@ -345,7 +389,10 @@ mod prepared {
 
         let uncommitted_changes = if has_uncommitted_changes {
             Some(PreparedUncommitedChanges {
-                uncommitted_changes_text: format!("{:<version_id_position$}(uncommitted changes)", ""),
+                uncommitted_changes_text: format!(
+                    "{:<version_id_position$}(uncommitted changes)",
+                    ""
+                ),
             })
         } else {
             None

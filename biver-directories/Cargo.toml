@@ -1,0 +1,7 @@
+[package]
+name = "biver-directories"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+directories = "6.0.0"

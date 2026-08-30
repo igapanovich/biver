@@ -1,0 +1,15 @@
+[package]
+name = "biver-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+derive_more = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+bs58 = { workspace = true }
+serde = { workspace = true }
+serde_json = "1.0"
+xxhash-rust = { version = "0.8.18", features = ["xxh3"] }
+dirs = { path = "../biver-directories", package = "biver-directories" }

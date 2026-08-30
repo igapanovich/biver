@@ -1,0 +1,6 @@
+create_patch_command = ["xdelta3", "-e", "-s", "{old}", "{new}", "{patch}"]
+apply_patch_command = ["xdelta3", "-d", "-s", "{old}", "{patch}", "{new}"]
+
+[[file_type_rules]]
+extensions = ["png", "jpg", "jpeg", "psd", "kra"]
+preview_command = ["magick", "{in}", "-flatten", "-thumbnail", "1024x1024>", "jpg:{out}"]

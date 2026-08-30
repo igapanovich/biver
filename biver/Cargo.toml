@@ -1,0 +1,17 @@
+[package]
+name = "biver"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+toml = { workspace = true }
+clap = { version = "4.6.6", features = ["derive", "env"] }
+colored = "3.1.1"
+chrono-humanize = "0.2.3"
+egui = "0.36.1"
+eframe = "0.36.1"
+image = "0.25.9"
+biver-core = { path = "../biver-core" }
+biver-configuration = { path = "../biver-configuration" }
+tracing-subscriber = { version = "0.3.23", features = ["std", "env-filter"] }

@@ -3,14 +3,6 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 pub struct CommandLineArguments {
-    /// Path to xdelta3 executable. If not specified, it will be searched in PATH.
-    #[arg(global(true), long = "xdelta3-path", env = "BIVER_XDELTA3_PATH")]
-    pub xdelta3_path: Option<PathBuf>,
-
-    /// Path to ImageMagick executable. If not specified, it will be searched in PATH.
-    #[arg(global(true), long = "image-magick-path", env = "BIVER_IMAGE_MAGICK_PATH")]
-    pub image_magick_path: Option<PathBuf>,
-
     #[command(subcommand)]
     pub command: Command,
 }
@@ -167,9 +159,6 @@ pub enum Command {
     /// Delete commands
     #[command(subcommand)]
     Delete(DeleteCommand),
-
-    /// List dependencies and check their statuses
-    Dependencies,
 }
 
 #[derive(Subcommand)]
