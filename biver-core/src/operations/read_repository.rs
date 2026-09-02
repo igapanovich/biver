@@ -1,8 +1,10 @@
+use derive_more::IsVariant;
 use crate::data::Repository;
 use crate::error::Result;
 use crate::repository_io::RepositoryDataResult;
 use crate::{RepositoryPaths, repository_io};
 
+#[derive(IsVariant)]
 pub enum Outcome {
     Initialized(Repository),
     NotInitialized,

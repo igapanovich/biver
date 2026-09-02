@@ -20,7 +20,7 @@ pub enum Outcome {
 pub fn init(
     config: &Configuration,
     paths: &RepositoryPaths,
-    branch: Option<impl Into<String>>,
+    branch: Option<String>,
     description: Option<&str>,
 ) -> Result<Outcome> {
     if fs::exists(&paths.data_file)? {
@@ -37,9 +37,7 @@ pub fn init(
 
     let new_version_id = VersionId::new();
 
-    let branch = branch
-        .map(|b| b.into())
-        .unwrap_or_else(|| DEFAULT_BRANCH.to_string());
+    let branch = branch.unwrap_or_else(|| DEFAULT_BRANCH.to_string());
 
     if !valid_branch_name(&branch) {
         return Ok(Outcome::InvalidBranchName);

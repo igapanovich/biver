@@ -142,12 +142,7 @@ fn run_command(command: Command) -> Result<()> {
             let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
             let config = config()?;
 
-            let result = ops::init(
-                &config,
-                &paths,
-                branch_name.as_deref(),
-                description.as_deref(),
-            )?;
+            let result = ops::init(&config, &paths, branch_name, description.as_deref())?;
 
             match result {
                 ops::init::Outcome::Ok => success_ok(),

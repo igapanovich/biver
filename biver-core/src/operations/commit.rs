@@ -7,9 +7,11 @@ use crate::operations::{
 use crate::repository_paths::RepositoryPaths;
 use crate::{hash, nickname, repository_io, temp_file};
 use chrono::Utc;
+use derive_more::IsVariant;
 use std::fs;
 use std::fs::File;
 
+#[derive(IsVariant)]
 pub enum Outcome {
     Ok,
     NothingToCommit,
