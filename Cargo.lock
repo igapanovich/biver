@@ -661,6 +661,7 @@ dependencies = [
  "bs58",
  "chrono",
  "derive_more",
+ "itertools 0.15.0",
  "proptest",
  "rstest",
  "serde",

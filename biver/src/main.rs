@@ -289,6 +289,9 @@ fn run_command(command: Command) -> Result<()> {
 
             match result {
                 ops::check_out::Outcome::Ok => success_ok(),
+                ops::check_out::Outcome::HasUncommittedChanges => {
+                    warning("Can not checkout because there are uncommitted changes")
+                }
                 ops::check_out::Outcome::InvalidTarget => error("Invalid target"),
             }
         }

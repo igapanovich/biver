@@ -1,4 +1,5 @@
 use crate::data::{Head, Version, VersionId};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -20,13 +21,34 @@ impl Repository {
                 let head_version_id = self
                     .branches
                     .get(branch)
-                    .expect("The head branch must always exist.");
+                    .expect("The branch pointed at by head should always exist");
                 self.version(*head_version_id)
             }
             Head::Version(version_id) => self.version(*version_id),
         };
 
-        head_version.expect("The head version must always exist.")
+        head_version.expect("Head should always point to a valid version")
+    }
+
+    pub fn root_version(&self) -> &Version {
+        let root_version = self
+            .versions
+            .iter()
+            .filter(|v| v.parent.is_none())
+            .exactly_one();
+
+        root_version.expect("A single root version should always exist")
+    }
+
+    pub fn branch_tip_version(&self, branch_name: &str) -> Option<&Version> {
+        let version_id = self.branches.get(branch_name)?;
+        let version = self
+            .versions
+            .iter()
+            .find(|v| v.id == *version_id)
+            .expect("Failed to get branch tip version");
+
+        Some(version)
     }
 
     pub fn valid(&self) -> bool {

@@ -2,5 +2,9 @@ create_patch_command = ["xdelta3", "-e", "-s", "{old}", "{new}", "{patch}"]
 apply_patch_command = ["xdelta3", "-d", "-s", "{old}", "{patch}", "{new}"]
 
 [[file_type_rules]]
-extensions = ["png", "jpg", "jpeg", "psd", "kra"]
+extensions = ["png", "jpg", "jpeg", "psd"]
 preview_command = ["magick", "{in}", "-flatten", "-thumbnail", "1024x1024>", "jpg:{out}"]
+
+[[file_type_rules]]
+extensions = ["kra"]
+preview_command = ["sh", "-c", "unzip -p '{in}' mergedimage.png | magick png:- -thumbnail '1024x1024>' 'jpg:{out}'"]

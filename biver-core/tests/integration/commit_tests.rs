@@ -1,10 +1,7 @@
-use crate::common::{samples, test_env};
+use crate::helpers::{samples, test_env};
 use biver_core::operations;
 use rstest::rstest;
 use std::fs;
-
-mod common;
-mod property_based;
 
 #[rstest]
 fn commit_succeeds(

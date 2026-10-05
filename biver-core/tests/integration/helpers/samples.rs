@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub static EMPTY: &[u8] = &[];
 
 pub static SAMPLE0: &[u8] = include_bytes!("samples/sample-0.kra");
