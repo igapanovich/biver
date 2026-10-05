@@ -16,6 +16,10 @@ pub struct TestEnv {
 
 impl Drop for TestEnv {
     fn drop(&mut self) {
+        if !self.root_path.starts_with("/tmp") {
+            panic!("Root path must be in /tmp");
+        }
+
         fs::remove_dir_all(&self.root_path).unwrap();
     }
 }
@@ -32,6 +36,16 @@ pub struct TestEnvWithVersionedFile {
     pub versioned_file_path: PathBuf,
     pub repo_paths: RepositoryPaths,
     pub config: Configuration,
+}
+
+impl Drop for TestEnvWithVersionedFile {
+    fn drop(&mut self) {
+        if !self.root_path.starts_with("/tmp") {
+            panic!("Root path must be in /tmp");
+        }
+
+        fs::remove_dir_all(&self.root_path).unwrap();
+    }
 }
 
 pub fn create_with_versioned_file(
@@ -57,6 +71,16 @@ pub struct TestEnvInitialized {
     pub config: Configuration,
 }
 
+impl Drop for TestEnvInitialized {
+    fn drop(&mut self) {
+        if !self.root_path.starts_with("/tmp") {
+            panic!("Root path must be in /tmp");
+        }
+
+        fs::remove_dir_all(&self.root_path).unwrap();
+    }
+}
+
 pub fn create_initialized(
     versioned_file_content: &[u8],
 ) -> Result<TestEnvInitialized, Box<dyn Error>> {
@@ -79,7 +103,7 @@ pub fn create_initialized(
     })
 }
 
-fn create_test_dir() -> Result<PathBuf, Box<dyn Error>> {
+pub fn create_test_dir() -> Result<PathBuf, Box<dyn Error>> {
     let id = Uuid::new_v4();
     let temp_dir = env::temp_dir();
     let test_dir = temp_dir.join(format!("biver-tests-{}", id));
@@ -87,14 +111,18 @@ fn create_test_dir() -> Result<PathBuf, Box<dyn Error>> {
     Ok(test_dir)
 }
 
-fn test_config() -> Configuration {
+pub fn test_config() -> Configuration {
     fn string_vec(collection: &[&str]) -> Vec<String> {
         collection.into_iter().map(|s| s.to_string()).collect()
     }
 
     Configuration {
-        create_patch_command: string_vec(&["xdelta3", "-e", "-s", "{old}", "{new}", "{patch}"]),
-        apply_patch_command: string_vec(&["xdelta3", "-d", "-s", "{old}", "{patch}", "{new}"]),
+        create_patch_command: string_vec(&[
+            "xdelta3", "-D", "-e", "-s", "{old}", "{new}", "{patch}",
+        ]),
+        apply_patch_command: string_vec(&[
+            "xdelta3", "-D", "-d", "-s", "{old}", "{patch}", "{new}",
+        ]),
         file_type_rules: vec![FileTypeRule {
             extensions: vec!["kra".to_string()],
             preview_command: Some(string_vec(&[

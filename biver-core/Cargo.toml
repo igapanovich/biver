@@ -16,3 +16,4 @@ dirs = { path = "../biver-directories", package = "biver-directories" }
 
 [dev-dependencies]
 rstest = "0.27.0"
+proptest = "1.11.0"

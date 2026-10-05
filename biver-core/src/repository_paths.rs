@@ -2,6 +2,7 @@ use crate::data::Version;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+#[derive(Clone)]
 pub struct RepositoryPaths {
     pub versioned_file: PathBuf,
     pub repository_dir: PathBuf,
