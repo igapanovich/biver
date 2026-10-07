@@ -5,6 +5,7 @@ pub enum RepositoryAction {
     ModifyVersionedFile(FileOperation),
     Init,
     Commit,
+    Discard,
 }
 
 #[derive(Debug, Clone)]

@@ -66,7 +66,7 @@ impl TestEnv {
         &self.paths
     }
 
-    pub fn read_repository(&self) -> Repository {
+    pub fn repository(&self) -> Repository {
         let operations::read_repository::Outcome::Initialized(repo) =
             operations::read_repository(&self.paths).unwrap()
         else {
@@ -76,8 +76,12 @@ impl TestEnv {
         repo
     }
 
-    pub fn read_versions_with_content(&self) -> HashSet<(Version, Vec<u8>)> {
-        self.read_repository()
+    pub fn has_uncommitted_changes(&self) -> bool {
+        operations::has_uncommitted_changes(&self.paths, &self.repository()).unwrap()
+    }
+
+    pub fn versions_with_content(&self) -> HashSet<(Version, Vec<u8>)> {
+        self.repository()
             .versions
             .into_iter()
             .map(|v| {
@@ -86,6 +90,10 @@ impl TestEnv {
                 (v, content)
             })
             .collect()
+    }
+
+    pub fn versioned_file_content(&self) -> Vec<u8> {
+        fs::read(&self.paths.versioned_file).unwrap()
     }
 
     pub fn run_action(&self, action: RepositoryAction) {
@@ -97,8 +105,11 @@ impl TestEnv {
                 operations::init(&self.config, &self.paths, None, None).unwrap();
             }
             RepositoryAction::Commit => {
-                operations::commit(&self.config, &self.paths, &mut self.read_repository(), None)
+                operations::commit(&self.config, &self.paths, &mut self.repository(), None)
                     .unwrap();
+            }
+            RepositoryAction::Discard => {
+                operations::discard(&self.config, &self.paths, &mut self.repository()).unwrap();
             }
         }
     }

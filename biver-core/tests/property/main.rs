@@ -6,5 +6,5 @@ mod test_config;
 
 mod helpers;
 
-mod checkout_tests;
+mod check_out_tests;
 mod commit_tests;

@@ -1,73 +1,42 @@
 use crate::helpers::arb;
 use biver_core::operations;
 use proptest::prelude::*;
-use std::fs;
 
 proptest! {
-    #[test]
-    fn commit_succeeds_on_initialized_repo(env in arb::test_env()) {
-        let outcome = operations::commit(env.config(), env.paths(), &mut env.read_repository(), None)?;
-
-        prop_assert!(outcome.is_ok() || outcome.is_nothing_to_commit())
-    }
+    #![proptest_config(ProptestConfig::with_cases(256 * 5))]
 
     #[test]
-    fn commit_after_discard_is_noop(env in arb::test_env()) {
-        operations::discard(env.config(), env.paths(), &env.read_repository())?;
+    fn commit_main_group(env in arb::env()) {
+        let versioned_file_bytes_before = env.versioned_file_content();
+        let versions_with_content_before = env.versions_with_content();
 
-        let outcome = operations::commit(env.config(), env.paths(), &mut env.read_repository(), None)?;
+        let had_uncommitted_changes_before = env.has_uncommitted_changes();
 
-        prop_assert!(outcome.is_nothing_to_commit())
-    }
+        let outcome = operations::commit(env.config(), env.paths(), &mut env.repository(), None)?;
 
-    #[test]
-    fn commit_does_not_modify_versioned_file(env in arb::test_env()) {
-        let bytes_before_commit = fs::read(&env.paths().versioned_file)?;
+        let versioned_file_bytes_after = env.versioned_file_content();
+        let versions_with_content_after = env.versions_with_content();
 
-        operations::commit(env.config(), env.paths(), &mut env.read_repository(), None)?;
+        if had_uncommitted_changes_before {
+            prop_assert!(outcome.is_ok(), "commit succeeds when there are uncommitted changes");
 
-        let bytes_after_commit = fs::read(&env.paths().versioned_file)?;
+            prop_assert_eq!(
+                versions_with_content_after.len(),
+                versions_with_content_before.len() + 1,
+                "successful commit increases version count by one"
+            );
+        } else {
+            prop_assert!(outcome.is_nothing_to_commit(), "commit is noop when there are no uncommitted changes");
+        }
 
-        prop_assert_eq!(bytes_before_commit, bytes_after_commit);
-    }
+        prop_assert!(!env.has_uncommitted_changes(), "commit does not leave uncommitted changes");
 
-    #[test]
-    fn no_uncommitted_changes_after_commit(env in arb::test_env()) {
-        operations::commit(env.config(), env.paths(), &mut env.read_repository(), None)?;
-
-        let has_uncommitted_changes = operations::has_uncommitted_changes(env.paths(), &env.read_repository())?;
-
-        prop_assert!(!has_uncommitted_changes);
-    }
-
-    #[test]
-    fn successful_commit_increases_version_count_by_one(env in arb::test_env(), file_operations in arb::few_file_operations()) {
-        let count_before = env.read_repository().versions.len();
-
-        env.run_versioned_file_operations(file_operations);
-
-        let outcome = operations::commit(env.config(), env.paths(), &mut env.read_repository(), None)?;
-
-        prop_assume!(outcome.is_ok());
-
-        let count_after = env.read_repository().versions.len();
-
-        prop_assert_eq!(count_after, count_before + 1);
-    }
-
-    #[test]
-    fn commit_does_not_modify_existing_versions(env in arb::test_env(), file_operations in arb::zero_or_few_file_operations()) {
-        let versions_with_content_before = env.read_versions_with_content();
-
-        env.run_versioned_file_operations(file_operations);
-
-        operations::commit(env.config(), env.paths(), &mut env.read_repository(), None)?;
-
-        let versions_with_content_after = env.read_versions_with_content();
+        prop_assert_eq!(versioned_file_bytes_before, versioned_file_bytes_after, "commit does not modify versioned file");
 
         prop_assert_eq!(
             &versions_with_content_before,
-            &versions_with_content_after.intersection(&versions_with_content_before).cloned().collect()
+            &versions_with_content_after.intersection(&versions_with_content_before).cloned().collect(),
+            "commit does not modify existing versions"
         );
     }
 }

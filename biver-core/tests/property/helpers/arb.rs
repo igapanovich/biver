@@ -21,8 +21,9 @@ pub fn non_empty_bytes() -> impl Strategy<Value = Vec<u8>> {
 
 fn repository_action() -> impl Strategy<Value = RepositoryAction> {
     prop_oneof![
-        3 => file_operation().prop_map(RepositoryAction::ModifyVersionedFile),
-        1 => Just(RepositoryAction::Commit)
+        9 => file_operation().prop_map(RepositoryAction::ModifyVersionedFile),
+        3 => Just(RepositoryAction::Commit),
+        1 => Just(RepositoryAction::Discard),
     ]
 }
 
@@ -36,10 +37,6 @@ pub fn file_operation() -> impl Strategy<Value = FileOperation> {
 
 pub fn zero_or_few_file_operations() -> impl Strategy<Value = Vec<FileOperation>> {
     vec(file_operation(), 0..5)
-}
-
-pub fn few_file_operations() -> impl Strategy<Value = Vec<FileOperation>> {
-    vec(file_operation(), 1..5)
 }
 
 fn file_operation_insert() -> impl Strategy<Value = FileOperation> {
@@ -77,7 +74,7 @@ fn init_then_other_repository_actions() -> impl Strategy<Value = Vec<RepositoryA
     })
 }
 
-pub fn test_env() -> impl Strategy<Value = TestEnv> {
+pub fn env() -> impl Strategy<Value = TestEnv> {
     init_then_other_repository_actions().prop_map(TestEnv::from_actions)
 }
 
