@@ -1,3 +1,4 @@
+use crate::helpers::checkout_target::CheckoutTarget;
 use crate::helpers::repository_action::{FileOperation, PositionInFile, RepositoryAction};
 use crate::helpers::test_env::TestEnv;
 use crate::helpers::version_path::{VersionPath, VersionPathNode, VersionPathStart};
@@ -22,8 +23,9 @@ pub fn non_empty_bytes() -> impl Strategy<Value = Vec<u8>> {
 fn repository_action() -> impl Strategy<Value = RepositoryAction> {
     prop_oneof![
         9 => file_operation().prop_map(RepositoryAction::ModifyVersionedFile),
-        3 => Just(RepositoryAction::Commit),
+        4 => Just(RepositoryAction::Commit),
         1 => Just(RepositoryAction::Discard),
+        1 => checkout_target().prop_map(RepositoryAction::CheckOut)
     ]
 }
 
@@ -33,10 +35,6 @@ pub fn file_operation() -> impl Strategy<Value = FileOperation> {
         12 => file_operation_remove_range(),
         1 => file_operation_overwrite(),
     ]
-}
-
-pub fn zero_or_few_file_operations() -> impl Strategy<Value = Vec<FileOperation>> {
-    vec(file_operation(), 0..5)
 }
 
 fn file_operation_insert() -> impl Strategy<Value = FileOperation> {
@@ -94,7 +92,14 @@ fn version_path_node() -> impl Strategy<Value = VersionPathNode> {
     prop_oneof![parent_of, child_of]
 }
 
-pub fn version_path() -> impl Strategy<Value = VersionPath> {
+fn version_path() -> impl Strategy<Value = VersionPath> {
     (version_path_start(), vec(version_path_node(), 0..100))
         .prop_map(|(start, nodes)| VersionPath { start, nodes })
+}
+
+pub fn checkout_target() -> impl Strategy<Value = CheckoutTarget> {
+    prop_oneof![
+        3 => any::<usize>().prop_map(CheckoutTarget::Branch),
+        1 => version_path().prop_map(CheckoutTarget::Version),
+    ]
 }

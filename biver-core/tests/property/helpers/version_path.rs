@@ -19,11 +19,11 @@ pub enum VersionPathNode {
     Parent,
 }
 
-pub trait RepositoryExt {
+pub trait VersionPathIdExtension {
     fn version_path_id(&self, path: &VersionPath) -> String;
 }
 
-impl RepositoryExt for Repository {
+impl VersionPathIdExtension for Repository {
     fn version_path_id(&self, path: &VersionPath) -> String {
         let mut current_version = match path.start {
             VersionPathStart::Root => self.root_version(),

@@ -1,3 +1,4 @@
+use crate::helpers::checkout_target::CheckoutTarget;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
@@ -6,6 +7,7 @@ pub enum RepositoryAction {
     Init,
     Commit,
     Discard,
+    CheckOut(CheckoutTarget),
 }
 
 #[derive(Debug, Clone)]

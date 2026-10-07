@@ -24,6 +24,10 @@ pub fn commit(
     repo: &mut Repository,
     description: Option<&str>,
 ) -> Result<Outcome> {
+    let Some(branch) = repo.head.branch() else {
+        return Ok(Outcome::HeadMustBeOnBranch);
+    };
+
     let versioned_file = File::open(&paths.versioned_file)?;
     let versioned_file_xxh3_128 = hash::xxh3_128(&versioned_file)?;
     let versioned_file_length = fs::metadata(&paths.versioned_file)?.len();
@@ -34,10 +38,6 @@ pub fn commit(
     if versioned_file_xxh3_128 == parent.versioned_file_xxh3_128 {
         return Ok(Outcome::NothingToCommit);
     }
-
-    let Some(branch) = repo.head.branch() else {
-        return Ok(Outcome::HeadMustBeOnBranch);
-    };
 
     let new_version_id = VersionId::new();
 

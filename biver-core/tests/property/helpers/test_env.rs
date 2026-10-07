@@ -1,3 +1,4 @@
+use crate::helpers::checkout_target::ResolveCheckoutTargetExtension;
 use crate::helpers::repository_action::{FileOperation, PositionInFile, RepositoryAction};
 use crate::{test_config, test_dir};
 use biver_core::configuration::Configuration;
@@ -96,7 +97,7 @@ impl TestEnv {
         fs::read(&self.paths.versioned_file).unwrap()
     }
 
-    pub fn run_action(&self, action: RepositoryAction) {
+    fn run_action(&self, action: RepositoryAction) {
         match action {
             RepositoryAction::ModifyVersionedFile(file_op) => {
                 self.run_versioned_file_operation(file_op);
@@ -111,19 +112,16 @@ impl TestEnv {
             RepositoryAction::Discard => {
                 operations::discard(&self.config, &self.paths, &mut self.repository()).unwrap();
             }
+            RepositoryAction::CheckOut(checkout_target) => {
+                let mut repository = self.repository();
+                let checkout_target = repository.resolve_checkout_target(&checkout_target);
+                operations::check_out(&self.config, &self.paths, &mut repository, &checkout_target)
+                    .unwrap();
+            }
         }
     }
 
-    pub fn run_versioned_file_operations(
-        &self,
-        file_operations: impl IntoIterator<Item = FileOperation>,
-    ) {
-        for file_operation in file_operations {
-            self.run_versioned_file_operation(file_operation);
-        }
-    }
-
-    pub fn run_versioned_file_operation(&self, file_operation: FileOperation) {
+    fn run_versioned_file_operation(&self, file_operation: FileOperation) {
         match file_operation {
             FileOperation::Overwrite(bytes) => {
                 fs::write(&self.paths.versioned_file, &bytes).unwrap();

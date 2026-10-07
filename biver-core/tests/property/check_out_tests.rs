@@ -1,20 +1,21 @@
 use crate::helpers::arb;
-use crate::helpers::version_path::RepositoryExt;
+use crate::helpers::checkout_target::ResolveCheckoutTargetExtension;
+use crate::{DEFAULT_CASE_COUNT, GROUP_CASE_MULTIPLIER};
 use biver_core::operations;
 use proptest::prelude::*;
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256 * 5))]
+    #![proptest_config(ProptestConfig::with_cases(DEFAULT_CASE_COUNT * GROUP_CASE_MULTIPLIER))]
 
     #[test]
-    fn check_out_main_group(env in arb::env(), checkout_path in arb::version_path()) {
+    fn check_out_main_group(env in arb::env(), checkout_target in arb::checkout_target()) {
         let versioned_file_bytes_before = env.versioned_file_content();
         let versions_with_content_before = env.versions_with_content();
         let had_uncommitted_changes_before = env.has_uncommitted_changes();
 
-        let checkout_id = env.repository().version_path_id(&checkout_path);
+        let checkout_target = env.repository().resolve_checkout_target(&checkout_target);
 
-        let outcome = operations::check_out(&env.config(), &env.paths(), &mut env.repository(), &checkout_id)?;
+        let outcome = operations::check_out(&env.config(), &env.paths(), &mut env.repository(), &checkout_target)?;
 
         let versioned_file_bytes_after = env.versioned_file_content();
         let versions_with_content_after = env.versions_with_content();
