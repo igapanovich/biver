@@ -15,7 +15,7 @@ proptest! {
 
         let checkout_target = env.repository().resolve_checkout_target(&checkout_target);
 
-        let outcome = operations::check_out(&env.config(), &env.paths(), &mut env.repository(), &checkout_target)?;
+        let outcome = operations::check_out(env.config(), env.paths(), &mut env.repository(), &checkout_target)?;
 
         let versioned_file_bytes_after = env.versioned_file_content();
         let versions_with_content_after = env.versions_with_content();

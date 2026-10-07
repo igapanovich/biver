@@ -66,7 +66,7 @@ fn resolve_target<'b, 'v>(repo: &'v Repository, target: &'b str) -> TargetResult
     if target.chars().nth(0) == Some('@')
         && let Ok(offset) = usize::from_str(&target[1..])
     {
-        let target_version = repo.iter_head_and_ancestors().nth(offset);
+        let target_version = repo.head_and_ancestors().nth(offset);
         return match target_version {
             None => TargetResult::Invalid,
             Some(target_version) => TargetResult::Version(target_version),
@@ -198,7 +198,7 @@ fn should_convert_patch_to_full(
     let mut patch_chain_length = new_patch_length;
 
     let preceding_patch_chain = repo
-        .iter_version_and_ancestors(parent_id)
+        .version_and_ancestors(parent_id)
         .take_while(|v| v.content_blob_kind.is_patch());
 
     for patch_version in preceding_patch_chain {

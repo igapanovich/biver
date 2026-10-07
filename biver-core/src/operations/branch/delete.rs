@@ -25,7 +25,7 @@ pub fn delete(paths: &RepositoryPaths, repo: &mut Repository, name: &str) -> Res
             .filter(|(b, _)| *b != name)
             .map(|(_, v)| *v);
         for leaf_id in leaf_ids {
-            for version in repo.iter_version_and_ancestors(leaf_id) {
+            for version in repo.version_and_ancestors(leaf_id) {
                 if !result.insert(version.id) {
                     break;
                 }
@@ -35,7 +35,7 @@ pub fn delete(paths: &RepositoryPaths, repo: &mut Repository, name: &str) -> Res
     };
 
     let erased_version_ids = repo
-        .iter_version_and_ancestors(branch_leaf_version_id)
+        .version_and_ancestors(branch_leaf_version_id)
         .map(|v| v.id)
         .take_while(|id| !versions_on_other_branches.contains(id))
         .collect::<Vec<_>>();

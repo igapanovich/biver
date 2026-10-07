@@ -77,7 +77,7 @@ impl Repository {
             let mut versions_belonging_to_branches = HashSet::new();
 
             for branch_leaf_id in self.branches.values() {
-                for v in self.iter_version_and_ancestors(*branch_leaf_id) {
+                for v in self.version_and_ancestors(*branch_leaf_id) {
                     if !versions_belonging_to_branches.insert(v.id) {
                         break;
                     }
@@ -94,7 +94,7 @@ impl Repository {
             && all_versions_belong_to_branches
     }
 
-    pub fn iter_version_and_ancestors(
+    pub fn version_and_ancestors(
         &'_ self,
         version_id: VersionId,
     ) -> impl Iterator<Item = &'_ Version> {
@@ -105,8 +105,8 @@ impl Repository {
         }
     }
 
-    pub fn iter_head_and_ancestors(&'_ self) -> impl Iterator<Item = &'_ Version> {
-        self.iter_version_and_ancestors(self.head_version().id)
+    pub fn head_and_ancestors(&'_ self) -> impl Iterator<Item = &'_ Version> {
+        self.version_and_ancestors(self.head_version().id)
     }
 
     pub fn children(&self, version_id: VersionId) -> impl Iterator<Item = &'_ Version> {

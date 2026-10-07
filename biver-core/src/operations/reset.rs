@@ -23,7 +23,7 @@ pub fn reset(paths: &RepositoryPaths, repo: &mut Repository, target: &str) -> Re
     let target_version_id = target_version.id;
 
     let erased_versions: Vec<_> = repo
-        .iter_head_and_ancestors()
+        .head_and_ancestors()
         .take_while(|v| v.id != target_version.id)
         .collect();
 

@@ -9,7 +9,7 @@ pub fn print_repository_data(repo_data: &Repository, has_uncommitted_changes: bo
         Some(MAX_VERSIONS_TO_PRINT)
     };
 
-    let versions_to_print: Vec<_> = repo_data.iter_head_and_ancestors().collect();
+    let versions_to_print: Vec<_> = repo_data.head_and_ancestors().collect();
 
     let prepared = prepared::prepare(
         repo_data,
@@ -219,14 +219,14 @@ mod prepared {
         let mut prepared_versions = Vec::new();
 
         let head_version_ids: Vec<VersionId> =
-            repo_data.iter_head_and_ancestors().map(|v| v.id).collect();
+            repo_data.head_and_ancestors().map(|v| v.id).collect();
 
         let branches_forking_at_version_id: HashMap<VersionId, Vec<String>> = repo_data
             .branches
             .iter()
             .map(|(branch, branch_leaf_id)| {
                 let join_version_id = repo_data
-                    .iter_version_and_ancestors(*branch_leaf_id)
+                    .version_and_ancestors(*branch_leaf_id)
                     .map(|v| v.id)
                     .find(|id| head_version_ids.contains(id))
                     .unwrap();

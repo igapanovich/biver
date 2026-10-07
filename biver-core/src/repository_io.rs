@@ -82,7 +82,7 @@ pub fn extract_version_content(
 ) -> Result<()> {
     let mut chain = vec![];
 
-    for version in repo.iter_version_and_ancestors(version_id) {
+    for version in repo.version_and_ancestors(version_id) {
         chain.push(version);
         if version.content_blob_kind.is_full() {
             break;
