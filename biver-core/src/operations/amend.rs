@@ -38,7 +38,7 @@ pub fn amend(
         return Ok(Outcome::HeadMustBeBranch);
     };
 
-    if repo.iter_children(head.id).next().is_some() {
+    if repo.children(head.id).next().is_some() {
         return Ok(Outcome::CannotAmendParent);
     }
 

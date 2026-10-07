@@ -3,7 +3,7 @@ use crate::data::VersionId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Version {
     pub id: VersionId,
     pub creation_time: DateTime<Utc>,

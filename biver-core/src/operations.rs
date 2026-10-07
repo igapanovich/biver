@@ -59,11 +59,11 @@ fn resolve_target<'b, 'v>(repo: &'v Repository, target: &'b str) -> TargetResult
     }
 
     // As offset
-    if target == "~" {
+    if target == "@" {
         return TargetResult::Version(repo.head_version());
     }
 
-    if target.chars().nth(0) == Some('~')
+    if target.chars().nth(0) == Some('@')
         && let Ok(offset) = usize::from_str(&target[1..])
     {
         let target_version = repo.iter_head_and_ancestors().nth(offset);

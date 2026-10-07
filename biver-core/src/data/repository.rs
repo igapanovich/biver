@@ -109,10 +109,14 @@ impl Repository {
         self.iter_version_and_ancestors(self.head_version().id)
     }
 
-    pub fn iter_children(&self, version_id: VersionId) -> impl Iterator<Item = &'_ Version> {
+    pub fn children(&self, version_id: VersionId) -> impl Iterator<Item = &'_ Version> {
         self.versions
             .iter()
             .filter(move |v| v.parent == Some(version_id))
+    }
+
+    pub fn branch_names(&self) -> impl Iterator<Item = &'_ str> {
+        self.branches.keys().into_iter().map(|k| k.as_str())
     }
 
     pub fn branch_leaf(&self, branch: &str) -> Option<&Version> {

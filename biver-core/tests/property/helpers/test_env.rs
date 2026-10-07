@@ -1,14 +1,16 @@
 use crate::helpers::repository_action::{FileOperation, PositionInFile, RepositoryAction};
 use crate::{test_config, test_dir};
 use biver_core::configuration::Configuration;
-use biver_core::data::Repository;
+use biver_core::data::{Repository, Version};
 use biver_core::{RepositoryPaths, operations};
+use std::collections::HashSet;
+use std::fmt::Debug;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::{env, fs};
 
-#[derive(Debug)]
 pub struct TestEnv {
+    init_actions: Vec<RepositoryAction>,
     test_dir: PathBuf,
     config: Configuration,
     paths: RepositoryPaths,
@@ -24,6 +26,12 @@ impl Drop for TestEnv {
     }
 }
 
+impl Debug for TestEnv {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TestEnv{:?}", self.init_actions)
+    }
+}
+
 impl TestEnv {
     pub fn new() -> TestEnv {
         let test_dir = test_dir::create().unwrap();
@@ -32,6 +40,7 @@ impl TestEnv {
         let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
 
         TestEnv {
+            init_actions: Vec::new(),
             test_dir,
             config,
             paths,
@@ -39,9 +48,12 @@ impl TestEnv {
     }
 
     pub fn from_actions(actions: impl IntoIterator<Item = RepositoryAction>) -> TestEnv {
-        let env = TestEnv::new();
+        let mut env = TestEnv::new();
 
-        env.run_actions(actions);
+        for action in actions {
+            env.run_action(action.clone());
+            env.init_actions.push(action);
+        }
 
         env
     }
@@ -64,10 +76,16 @@ impl TestEnv {
         repo
     }
 
-    pub fn run_actions(&self, actions: impl IntoIterator<Item = RepositoryAction>) {
-        for action in actions {
-            self.run_action(action);
-        }
+    pub fn read_versions_with_content(&self) -> HashSet<(Version, Vec<u8>)> {
+        self.read_repository()
+            .versions
+            .into_iter()
+            .map(|v| {
+                let content_path = self.paths.file_path(&v.content_blob_file_name);
+                let content = fs::read(&content_path).unwrap();
+                (v, content)
+            })
+            .collect()
     }
 
     pub fn run_action(&self, action: RepositoryAction) {

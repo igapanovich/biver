@@ -33,7 +33,7 @@ pub fn reset(paths: &RepositoryPaths, repo: &mut Repository, target: &str) -> Re
     }
 
     let head_has_children = repo
-        .iter_children(repo.head_version().id)
+        .children(repo.head_version().id)
         .count_is_at_least(1);
     if head_has_children {
         return Ok(Outcome::CannotLeaveOrphans);
@@ -41,7 +41,7 @@ pub fn reset(paths: &RepositoryPaths, repo: &mut Repository, target: &str) -> Re
 
     let erased_versions_have_multi_parents = erased_versions
         .iter()
-        .any(|v| repo.iter_children(v.id).count_is_at_least(2));
+        .any(|v| repo.children(v.id).count_is_at_least(2));
     if erased_versions_have_multi_parents {
         return Ok(Outcome::CannotLeaveOrphans);
     }

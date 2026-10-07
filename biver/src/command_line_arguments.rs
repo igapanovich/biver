@@ -26,7 +26,7 @@ pub enum Command {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 
-        /// Target branch or version to preview. May be one of the following (in order of precedence): branch name, version ID, head offset (~, ~1, ~2), version nickname (adjective-noun, adjectivenoun, an).
+        /// Target branch or version to preview. May be one of the following (in order of precedence): branch name, version ID, head offset (@, @1, @2), version nickname (adjective-noun, adjectivenoun, an).
         target: String,
     },
 
@@ -36,10 +36,10 @@ pub enum Command {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 
-        /// Target branch or version to compare. May be one of the following (in order of precedence): branch name, version ID, head offset (~, ~1, ~2), version nickname (adjective-noun, adjectivenoun, an).
+        /// Target branch or version to compare. May be one of the following (in order of precedence): branch name, version ID, head offset (@, @1, @2), version nickname (adjective-noun, adjectivenoun, an).
         target1: String,
 
-        /// (Default: head) Target branch or version to compare. May be one of the following (in order of precedence): branch name, version ID, head offset (~, ~1, ~2), version nickname (adjective-noun, adjectivenoun, an).
+        /// (Default: head) Target branch or version to compare. May be one of the following (in order of precedence): branch name, version ID, head offset (@, @1, @2), version nickname (adjective-noun, adjectivenoun, an).
         target2: Option<String>,
     },
 
@@ -127,7 +127,7 @@ pub enum Command {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 
-        /// Target branch or version to preview. May be one of the following (in order of precedence): branch name, version ID, head offset (~, ~1, ~2), version nickname (adjective-noun, adjectivenoun, an).
+        /// Target branch or version to preview. May be one of the following (in order of precedence): branch name, version ID, head offset (@, @1, @2), version nickname (adjective-noun, adjectivenoun, an).
         target: String,
     },
 
@@ -140,7 +140,7 @@ pub enum Command {
         #[arg(short = 'o', long = "output")]
         output: Option<PathBuf>,
 
-        /// Target branch or version to restore. May be one of the following (in order of precedence): branch name, version ID, head offset (~, ~1, ~2), version nickname (adjective-noun, adjectivenoun, an).
+        /// Target branch or version to restore. May be one of the following (in order of precedence): branch name, version ID, head offset (@, @1, @2), version nickname (adjective-noun, adjectivenoun, an).
         target: String,
     },
 
