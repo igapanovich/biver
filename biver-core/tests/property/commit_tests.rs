@@ -1,6 +1,8 @@
 use crate::helpers::arb;
+use crate::helpers::difference::Difference;
 use crate::{DEFAULT_CASE_COUNT, GROUP_CASE_MULTIPLIER};
 use biver_core::operations;
+use itertools::Itertools;
 use proptest::prelude::*;
 
 proptest! {
@@ -9,6 +11,7 @@ proptest! {
     #[test]
     fn commit_main_group(env in arb::env()) {
         let head_before = env.repository().head;
+        let branches_before = env.repository().branches;
         let versioned_file_bytes_before = env.versioned_file_content();
         let versions_with_content_before = env.versions_with_content();
         let had_uncommitted_changes_before = env.has_uncommitted_changes();
@@ -16,6 +19,7 @@ proptest! {
         let outcome = operations::commit(env.config(), env.paths(), &mut env.repository(), None)?;
 
         let head_after = env.repository().head;
+        let branches_after = env.repository().branches;
         let versioned_file_bytes_after = env.versioned_file_content();
         let versions_with_content_after = env.versions_with_content();
         let has_uncommitted_changes_after = env.has_uncommitted_changes();
@@ -45,6 +49,14 @@ proptest! {
             "commit does not modify existing versions"
         );
 
-        prop_assert_eq!(head_before, head_after, "commit does not modify head");
+        prop_assert_eq!(&head_before, &head_after, "commit does not modify head");
+
+        let modified_branches = branches_before.difference(&branches_after).keys().map(|n| Some(n.as_str())).collect_vec();
+
+        if outcome.is_ok() {
+            prop_assert_eq!(modified_branches, vec![head_before.branch()], "successful commit modifies head branch and does not modify any other branches");
+        } else {
+            prop_assert_eq!(modified_branches, Vec::new(), "failed commit does not modify branches");
+        }
     }
 }
