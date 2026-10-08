@@ -1,8 +1,9 @@
 use crate::helpers::version_path::{VersionPath, VersionPathIdExtension};
 use biver_core::data::Repository;
+use derive_more::IsVariant;
 use itertools::Itertools;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, IsVariant)]
 pub enum CheckoutTarget {
     Version(VersionPath),
     Branch(usize),
