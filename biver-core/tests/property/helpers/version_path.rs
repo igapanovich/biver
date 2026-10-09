@@ -1,24 +1,24 @@
+use crate::helpers::index_ext::IndexExt;
 use biver_core::data::{Repository, Version};
 use itertools::Itertools;
 use proptest::sample::Index;
+use std::fmt::Debug;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct VersionPath {
-    pub start: VersionPathStart,
-    pub nodes: Vec<VersionPathNode>,
+    pub branch: Index,
+    pub depth_from_tip: Index,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum VersionPathStart {
-    Root,
-    Head,
-    TipOfBranch(Index),
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum VersionPathNode {
-    Child(Index),
-    Parent,
+impl Debug for VersionPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "/branch({})/down({})",
+            self.branch.debug_fraction(),
+            self.depth_from_tip.debug_fraction()
+        )
+    }
 }
 
 pub trait ResolveVersionPathExt {
@@ -27,35 +27,13 @@ pub trait ResolveVersionPathExt {
 
 impl ResolveVersionPathExt for Repository {
     fn resolve_version_path(&self, path: &VersionPath) -> &Version {
-        let mut current_version = match path.start {
-            VersionPathStart::Root => self.root_version(),
-            VersionPathStart::Head => self.head_version(),
-            VersionPathStart::TipOfBranch(index) => {
-                let mut branches = self.branch_names().collect_vec();
-                branches.sort();
-                let index = index.index(branches.len());
-                self.branch_tip_version(branches[index]).unwrap()
-            }
-        };
+        let mut branches = self.branches.iter().collect_vec();
+        branches.sort_by_key(|(name, _)| *name);
 
-        for node in &path.nodes {
-            match node {
-                VersionPathNode::Child(index) => {
-                    let children = self.children(current_version.id).collect_vec();
+        let branch_tip_id = *path.branch.get(&branches).1;
 
-                    if !children.is_empty() {
-                        let index = index.index(children.len());
-                        current_version = children[index];
-                    }
-                }
-                VersionPathNode::Parent => {
-                    if let Some(parent_id) = current_version.parent {
-                        current_version = self.version(parent_id).unwrap();
-                    }
-                }
-            }
-        }
+        let branch_versions_from_tip = self.version_and_ancestors(branch_tip_id).collect_vec();
 
-        current_version
+        *path.depth_from_tip.get(&branch_versions_from_tip)
     }
 }

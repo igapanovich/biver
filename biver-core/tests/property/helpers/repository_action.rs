@@ -1,4 +1,6 @@
+use crate::helpers::byte_chunk::ByteChunk;
 use crate::helpers::checkout_target::CheckoutTarget;
+use crate::helpers::index_ext::IndexExt;
 use proptest::sample::Index;
 use std::fmt::Debug;
 
@@ -11,12 +13,31 @@ pub enum RepositoryAction {
     CheckOut(CheckoutTarget),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum FileOperation {
-    Overwrite(Vec<u8>),
+    Overwrite(ByteChunk),
     Splice {
         range_start: Index,
         range_length: Index,
-        bytes: Vec<u8>,
+        bytes: ByteChunk,
     },
+}
+
+impl Debug for FileOperation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileOperation::Overwrite(bytes) => write!(f, "Overwrite{:?}", bytes),
+            FileOperation::Splice {
+                range_start,
+                range_length,
+                bytes,
+            } => write!(
+                f,
+                "Splice({}, {}){:?}",
+                range_start.debug_fraction(),
+                range_length.debug_fraction(),
+                bytes
+            ),
+        }
+    }
 }

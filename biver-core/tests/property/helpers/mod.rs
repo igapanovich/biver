@@ -4,3 +4,5 @@ pub mod difference;
 pub mod repository_action;
 pub mod test_env;
 pub mod version_path;
+mod byte_chunk;
+mod index_ext;

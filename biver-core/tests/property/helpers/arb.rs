@@ -1,7 +1,8 @@
+use crate::helpers::byte_chunk::ByteChunk;
 use crate::helpers::checkout_target::CheckoutTarget;
 use crate::helpers::repository_action::{FileOperation, RepositoryAction};
 use crate::helpers::test_env::TestEnv;
-use crate::helpers::version_path::{VersionPath, VersionPathNode, VersionPathStart};
+use crate::helpers::version_path::VersionPath;
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
@@ -17,11 +18,11 @@ pub fn checkout_target() -> impl Strategy<Value = CheckoutTarget> {
     ]
 }
 
-fn bytes() -> impl Strategy<Value = Vec<u8>> {
+fn bytes() -> impl Strategy<Value = ByteChunk> {
     prop_oneof![
-        10 => vec(any::<u8>(), 2..2048),
-        1 => vec(any::<u8>(), 1),
-        1 => Just(vec![]),
+        10 => vec(any::<u8>(), 2..2048).prop_map(ByteChunk::from),
+        1 => vec(any::<u8>(), 1).prop_map(ByteChunk::from),
+        1 => Just(ByteChunk::from(Vec::new())),
     ]
 }
 
@@ -67,29 +68,9 @@ fn init_then_other_repository_actions() -> impl Strategy<Value = Vec<RepositoryA
     })
 }
 
-fn version_path_start() -> impl Strategy<Value = VersionPathStart> {
-    let tip_of_branch = any::<Index>()
-        .no_shrink()
-        .prop_map(VersionPathStart::TipOfBranch);
-
-    prop_oneof![
-        Just(VersionPathStart::Root),
-        Just(VersionPathStart::Head),
-        tip_of_branch,
-    ]
-}
-
-fn version_path_node() -> impl Strategy<Value = VersionPathNode> {
-    let parent = Just(VersionPathNode::Parent);
-
-    let child = any::<Index>()
-        .no_shrink()
-        .prop_map(|child_num| VersionPathNode::Child(child_num));
-
-    prop_oneof![parent, child]
-}
-
-fn version_path() -> impl Strategy<Value = VersionPath> {
-    (version_path_start(), vec(version_path_node(), 0..100))
-        .prop_map(|(start, nodes)| VersionPath { start, nodes })
+pub fn version_path() -> impl Strategy<Value = VersionPath> {
+    (any::<Index>(), any::<Index>()).prop_map(|(branch, depth_from_tip)| VersionPath {
+        branch,
+        depth_from_tip,
+    })
 }
