@@ -160,7 +160,7 @@ fn process_output_to_result(output: Output) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::external_command::{TemplatePart, parse_template, render_template};
+    use crate::utilities::external_command::{TemplatePart, parse_template, render_template};
 
     #[test]
     fn parse_template_is_correct() {

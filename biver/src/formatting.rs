@@ -1,8 +1,8 @@
-use biver_core::data::{Repository, Version};
+use biver_core::data::{Tree, Version};
 
 const MAX_VERSIONS_TO_PRINT: usize = 20;
 
-pub fn print_repository_data(repo_data: &Repository, has_uncommitted_changes: bool, all: bool) {
+pub fn print_repository_data(repo_data: &Tree, has_uncommitted_changes: bool, all: bool) {
     let limit = if all {
         None
     } else {
@@ -32,12 +32,12 @@ pub fn print_repository_data(repo_data: &Repository, has_uncommitted_changes: bo
     }
 }
 
-pub fn format_versions(repo_data: &Repository, versions: &[&Version]) -> Vec<String> {
+pub fn format_versions(repo_data: &Tree, versions: &[&Version]) -> Vec<String> {
     let prepared = prepared::prepare(repo_data, versions, false, None);
     prepared.versions.iter().map(|v| v.to_string()).collect()
 }
 
-pub fn print_branch_list(repo_data: &Repository) {
+pub fn print_branch_list(repo_data: &Tree) {
     for branch in repo_data.branches.keys() {
         println!("{}", branch)
     }
@@ -110,7 +110,7 @@ mod colorization {
 }
 
 mod prepared {
-    use biver_core::data::{Repository, Version, VersionId};
+    use biver_core::data::{Tree, Version, VersionId};
     use chrono_humanize::HumanTime;
     use itertools::Itertools;
     use std::collections::{HashMap, HashSet};
@@ -212,7 +212,7 @@ mod prepared {
     }
 
     pub fn prepare(
-        repo_data: &Repository,
+        repo_data: &Tree,
         versions_to_prepare: &[&Version],
         has_uncommitted_changes: bool,
         limit_from_end: Option<usize>,

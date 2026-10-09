@@ -2,8 +2,9 @@ use crate::command_line_arguments::{
     Command, CommandLineArguments, CreateCommand, DeleteCommand, ListCommand, RenameCommand,
 };
 use crate::error::{Error, Result, Severity, error, warning};
-use biver_core::data::Repository;
-use biver_core::{RepositoryPaths, operations as ops};
+use biver_core::data::Tree;
+use biver_core::repository::session::{NewSession, Session};
+use biver_core::{RepositoryPaths, Session, operations as ops};
 use clap::Parser;
 use colored::Colorize;
 use std::io;
@@ -50,6 +51,10 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             all,
         } => {
+            let session = Session::new(versioned_file_path)?;
+            match session {
+                NewSession::Uninitialized(_) => println!("Not initialized")
+            }
             let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
             let repo = ops::read_repository(&paths)?;
 
@@ -83,7 +88,7 @@ fn run_command(command: Command) -> Result<()> {
                 ops::resolve_version::Outcome::Ok(version) => version,
             };
 
-            let Some(preview_file_path) = paths.preview_path(version) else {
+            let Some(preview_file_path) = paths.preview_blob_path(version) else {
                 return error("No preview available");
             };
 
@@ -111,7 +116,7 @@ fn run_command(command: Command) -> Result<()> {
                     },
                 };
 
-                match paths.preview_path(version) {
+                match paths.preview_blob_path(version) {
                     Some(preview) => Ok((version, preview)),
                     None => error(format!("No preview available for {}", version.id.bs58())),
                 }
@@ -425,11 +430,11 @@ fn read_yes_no_input() -> Result<Option<bool>> {
 }
 
 trait RepositoryDataResultExtensions {
-    fn initialized(self) -> Result<Repository>;
+    fn initialized(self) -> Result<Tree>;
 }
 
 impl RepositoryDataResultExtensions for ops::read_repository::Outcome {
-    fn initialized(self) -> Result<Repository> {
+    fn initialized(self) -> Result<Tree> {
         match self {
             ops::read_repository::Outcome::NotInitialized => Err(Error {
                 message: "Not initialized".to_string(),

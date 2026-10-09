@@ -1,5 +1,6 @@
+use crate::helpers::extensions::UnwrapTryStartSessionExt;
 use crate::helpers::{samples, test_env};
-use biver_core::operations;
+use biver_core::repository;
 use rstest::rstest;
 use std::fs;
 
@@ -34,22 +35,23 @@ fn commit_succeeds(
     )]
     committed_content: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut env = test_env::create_initialized(initial_content)?;
+    let env = test_env::create_initialized(initial_content)?;
 
     fs::write(&env.versioned_file_path, committed_content)?;
 
-    let commit_outcome = operations::commit(&env.config, &env.repo_paths, &mut env.repo, None)?;
+    let mut session =
+        repository::try_start_session(env.config.clone(), env.versioned_file_path.clone())?
+            .unwrap();
+
+    let commit_result = session.commit(None)?;
 
     if initial_content.eq(committed_content) {
-        assert!(commit_outcome.is_nothing_to_commit())
+        assert!(commit_result.is_no_uncommitted_changes())
     } else {
-        assert!(commit_outcome.is_ok());
+        assert!(commit_result.is_ok());
     }
 
-    let has_uncommitted_changes =
-        operations::has_uncommitted_changes(&env.repo_paths, &mut env.repo)?;
-
-    assert!(!has_uncommitted_changes);
+    assert_eq!(session.has_uncommitted_changes()?, false);
 
     Ok(())
 }
@@ -68,18 +70,19 @@ fn commit_succeeds(
 fn commit_from_empty_to_nonempty_succeeds(
     #[case] committed_content: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut env = test_env::create_initialized(samples::EMPTY)?;
+    let env = test_env::create_initialized(samples::EMPTY)?;
 
     fs::write(&env.versioned_file_path, committed_content)?;
 
-    let commit_outcome = operations::commit(&env.config, &env.repo_paths, &mut env.repo, None)?;
+    let mut session =
+        repository::try_start_session(env.config.clone(), env.versioned_file_path.clone())?
+            .unwrap();
 
-    assert!(commit_outcome.is_ok());
+    let commit_result = session.commit(None)?;
 
-    let has_uncommitted_changes =
-        operations::has_uncommitted_changes(&env.repo_paths, &mut env.repo)?;
+    assert!(commit_result.is_ok());
 
-    assert!(!has_uncommitted_changes);
+    assert_eq!(session.has_uncommitted_changes()?, false);
 
     Ok(())
 }
@@ -98,18 +101,21 @@ fn commit_from_empty_to_nonempty_succeeds(
 fn commit_from_nonempty_to_empty_succeeds(
     #[case] initial_content: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut env = test_env::create_initialized(initial_content)?;
+    let env = test_env::create_initialized(initial_content)?;
 
     fs::write(&env.versioned_file_path, samples::EMPTY)?;
 
-    let commit_outcome = operations::commit(&env.config, &env.repo_paths, &mut env.repo, None)?;
+    let mut session =
+        repository::try_start_session(env.config.clone(), env.versioned_file_path.clone())?
+            .unwrap();
 
-    assert!(commit_outcome.is_ok());
+    let commit_result = session.commit(None)?;
 
-    let has_uncommitted_changes =
-        operations::has_uncommitted_changes(&env.repo_paths, &mut env.repo)?;
+    assert!(commit_result.is_ok());
 
-    assert!(!has_uncommitted_changes);
+    assert!(commit_result.is_ok());
+
+    assert_eq!(session.has_uncommitted_changes()?, false);
 
     Ok(())
 }

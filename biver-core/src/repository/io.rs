@@ -1,30 +1,26 @@
 use crate::configuration::Configuration;
-use crate::data::{ContentBlobKind, Repository, VersionId};
+use crate::data::{ContentBlobKind, Tree, VersionId};
 use crate::error::{Error, Result};
-use crate::repository_paths::RepositoryPaths;
-use crate::{diff, external_command, temp_file};
+use crate::repository::paths::RepositoryPaths;
+use crate::temp_file;
+use crate::utilities::{external_command, external_diff_command};
 use itertools::Itertools;
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-pub enum RepositoryDataResult {
-    Initialized(Repository),
-    NotInitialized,
-}
-
-pub fn read_data(paths: &RepositoryPaths) -> Result<RepositoryDataResult> {
-    if !paths.data_file.exists() {
-        return Ok(RepositoryDataResult::NotInitialized);
+pub fn read_tree(paths: &RepositoryPaths) -> Result<Option<Tree>> {
+    if !paths.tree_file().exists() {
+        return Ok(None);
     }
 
-    let data_file_contents = fs::read(&paths.data_file)?;
+    let data_file_contents = fs::read(paths.tree_file())?;
     let repository_data = serde_json::from_slice(&data_file_contents)?;
 
-    Ok(RepositoryDataResult::Initialized(repository_data))
+    Ok(Some(repository_data))
 }
 
-pub fn write_data(paths: &RepositoryPaths, repo: &Repository) -> Result<()> {
+pub fn write_tree(paths: &RepositoryPaths, repo: &Tree) -> Result<()> {
     assert!(repo.valid(), "Repository data is not valid: {:#?}", repo);
 
     let backup1 = paths.file_path("data_backup1.json");
@@ -37,10 +33,10 @@ pub fn write_data(paths: &RepositoryPaths, repo: &Repository) -> Result<()> {
     rotate_backup(&backup3, &backup4, Duration::from_hours(5))?;
     rotate_backup(&backup2, &backup3, Duration::from_hours(1))?;
     rotate_backup(&backup1, &backup2, Duration::from_mins(5))?;
-    rotate_backup(&paths.data_file, &backup1, Duration::from_secs(10))?;
+    rotate_backup(paths.tree_file(), &backup1, Duration::from_secs(10))?;
 
     let data_file_content = serde_json::to_string_pretty(repo)?;
-    fs::write(&paths.data_file, data_file_content)?;
+    fs::write(paths.tree_file(), data_file_content)?;
 
     Ok(())
 }
@@ -55,7 +51,7 @@ pub fn store_version_content_patch(
         fs::remove_file(patch_blob_file_path)?;
     }
 
-    diff::create_patch(
+    external_diff_command::create_patch(
         &config,
         &base_blob_file_path,
         content_to_store_path,
@@ -77,13 +73,13 @@ pub fn store_version_content_full(
 pub fn extract_version_content(
     config: &Configuration,
     paths: &RepositoryPaths,
-    repo: &Repository,
+    tree: &Tree,
     version_id: VersionId,
     destination_path: &Path,
 ) -> Result<()> {
     let mut chain = vec![];
 
-    for version in repo.version_and_ancestors(version_id) {
+    for version in tree.version_and_ancestors(version_id) {
         chain.push(version);
         if version.content_blob_kind.is_full() {
             break;
@@ -97,7 +93,7 @@ pub fn extract_version_content(
     }
 
     for version in chain {
-        let blob_file_path = paths.file_path(&version.content_blob_file_name);
+        let blob_file_path = paths.content_blob_path(version.id);
 
         match version.content_blob_kind {
             ContentBlobKind::Full => {
@@ -105,7 +101,12 @@ pub fn extract_version_content(
             }
             ContentBlobKind::Patch => {
                 let temp_file_path = temp_file::new_path()?;
-                diff::apply_patch(&config, destination_path, &blob_file_path, &temp_file_path)?;
+                external_diff_command::apply_patch(
+                    &config,
+                    destination_path,
+                    &blob_file_path,
+                    &temp_file_path,
+                )?;
                 fs::copy(&temp_file_path, destination_path)?;
                 fs::remove_file(&temp_file_path)?;
             }

@@ -57,8 +57,8 @@ impl From<toml::de::Error> for Error {
     }
 }
 
-impl From<biver_core::error::Error> for Error {
-    fn from(value: biver_core::error::Error) -> Self {
+impl From<biver_core::Error> for Error {
+    fn from(value: biver_core::Error) -> Self {
         Self {
             message: value.to_string(),
             severity: Severity::Error,

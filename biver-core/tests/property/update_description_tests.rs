@@ -1,7 +1,7 @@
 use crate::helpers::arb;
+use crate::helpers::extensions::SessionExt;
 use crate::helpers::version_path::ResolveVersionPathExt;
 use crate::{DEFAULT_CASE_COUNT, GROUP_CASE_MULTIPLIER};
-use biver_core::operations;
 use proptest::prelude::*;
 use std::collections::HashSet;
 
@@ -9,21 +9,23 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(DEFAULT_CASE_COUNT * GROUP_CASE_MULTIPLIER))]
 
     #[test]
-    fn reword_main_group(env in arb::env(), target in arb::version_path(), new_description in any::<String>()) {
-        let head_before = env.repository().head;
-        let branches_before = env.repository().branches;
+    fn update_description_main_group(env in arb::env(), target in arb::version_path(), new_description in any::<String>()) {
+        let mut session = env.start_session();
+
+        let head_before = session.tree().head().clone();
+        let branches_before = session.tree().branch_tip_ids().clone();
         let versioned_file_bytes_before = env.versioned_file_content();
-        let versions_with_content_before = env.versions_with_content();
+        let versions_with_content_before = session.versions_with_content();
         let versions_before = versions_with_content_before.iter().map(|(v, _)| v).collect::<HashSet<_>>();
         let version_contents_before = versions_with_content_before.iter().map(|(_, c)| c).collect::<HashSet<_>>();
 
-        let target = env.repository().resolve_version_path(&target).id.bs58();
-        operations::reword(env.paths(), &mut env.repository(), &target, new_description).unwrap();
+        let target = session.tree().resolve_version_path(&target).id;
+        session.update_description(target, new_description)?;
 
-        let head_after = env.repository().head;
-        let branches_after = env.repository().branches;
+        let head_after = session.tree().head().clone();
+        let branches_after = session.tree().branch_tip_ids().clone();
         let versioned_file_bytes_after = env.versioned_file_content();
-        let versions_with_content_after = env.versions_with_content();
+        let versions_with_content_after = session.versions_with_content();
         let versions_after = versions_with_content_after.iter().map(|(v, _)| v).collect::<HashSet<_>>();
         let version_contents_after = versions_with_content_after.iter().map(|(_, c)| c).collect::<HashSet<_>>();
 

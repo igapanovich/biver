@@ -1,18 +1,31 @@
-use crate::data::{Head, Version, VersionId};
+use crate::data::{BranchName, Head, Version, VersionId};
+use crate::utilities::extensions::CountIsAtLeast;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Repository {
-    pub head: Head,
-    pub branches: HashMap<String, VersionId>,
-    pub versions: Vec<Version>,
+pub struct Tree {
+    pub(crate) head: Head,
+    pub(crate) branches: HashMap<BranchName, VersionId>,
+    pub(crate) versions: Vec<Version>,
 }
 
-impl Repository {
+impl Tree {
+    pub fn head(&self) -> &Head {
+        &self.head
+    }
+
+    pub fn versions(&self) -> &[Version] {
+        self.versions.as_slice()
+    }
+
     pub fn version(&self, id: VersionId) -> Option<&Version> {
         self.versions.iter().find(|v| v.id == id)
+    }
+
+    pub fn version_mut(&mut self, id: VersionId) -> Option<&mut Version> {
+        self.versions.iter_mut().find(|v| v.id == id)
     }
 
     pub fn head_version(&self) -> &Version {
@@ -30,6 +43,16 @@ impl Repository {
         head_version.expect("Head should always point to a valid version")
     }
 
+    pub fn head_version_id(&self) -> VersionId {
+        match &self.head {
+            Head::Branch(branch) => *self
+                .branches
+                .get(branch)
+                .expect("The branch pointed at by head should always exist"),
+            Head::Version(version_id) => *version_id,
+        }
+    }
+
     pub fn root_version(&self) -> &Version {
         let root_version = self
             .versions
@@ -40,7 +63,7 @@ impl Repository {
         root_version.expect("A single root version should always exist")
     }
 
-    pub fn branch_tip_version(&self, branch_name: &str) -> Option<&Version> {
+    pub fn branch_tip_version(&self, branch_name: &BranchName) -> Option<&Version> {
         let version_id = self.branches.get(branch_name)?;
         let version = self
             .versions
@@ -94,55 +117,107 @@ impl Repository {
             && all_versions_belong_to_branches
     }
 
-    pub fn version_and_ancestors(
-        &'_ self,
-        version_id: VersionId,
-    ) -> impl Iterator<Item = &'_ Version> {
-        let version = self.version(version_id);
+    pub fn version_and_ancestors(&self, version_id: VersionId) -> impl Iterator<Item = &Version> {
         VersionAndAncestors {
-            repository_data: self,
-            current_version: version,
+            tree: self,
+            current_version_id: Some(version_id),
         }
     }
 
-    pub fn head_and_ancestors(&'_ self) -> impl Iterator<Item = &'_ Version> {
+    pub fn head_and_ancestors(&self) -> impl Iterator<Item = &Version> {
         self.version_and_ancestors(self.head_version().id)
     }
 
-    pub fn children(&self, version_id: VersionId) -> impl Iterator<Item = &'_ Version> {
+    pub fn children(&self, version_id: VersionId) -> impl Iterator<Item = &Version> {
         self.versions
             .iter()
             .filter(move |v| v.parent == Some(version_id))
     }
 
-    pub fn branch_names(&self) -> impl Iterator<Item = &'_ str> {
-        self.branches.keys().into_iter().map(|k| k.as_str())
+    pub fn branch_tip_ids(&self) -> &HashMap<BranchName, VersionId> {
+        &self.branches
     }
 
-    pub fn branch_leaf(&self, branch: &str) -> Option<&Version> {
+    pub fn branch_names(&self) -> impl Iterator<Item = &BranchName> {
+        self.branches.keys().into_iter()
+    }
+
+    pub fn branch_leaf(&self, branch: &BranchName) -> Option<&Version> {
         self.branches
             .get(branch)
             .and_then(|version_id| self.version(*version_id))
     }
+
+    pub fn exclusive_branch_tip_and_ancestors<'a>(
+        &'a self,
+        branch_name: &'a BranchName,
+    ) -> impl Iterator<Item = &'a Version> {
+        ExclusiveBranchTipAndAncestors {
+            tree: self,
+            branch_name,
+            current_version_id: self.branches.get(branch_name).copied(),
+            at_branch_tip: true,
+        }
+    }
 }
 
-pub struct VersionAndAncestors<'a> {
-    repository_data: &'a Repository,
-    current_version: Option<&'a Version>,
+struct VersionAndAncestors<'a> {
+    tree: &'a Tree,
+    current_version_id: Option<VersionId>,
 }
 
 impl<'a> Iterator for VersionAndAncestors<'a> {
     type Item = &'a Version;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.current_version {
-            None => None,
-            Some(version) => {
-                self.current_version = version
-                    .parent
-                    .and_then(|parent_id| self.repository_data.version(parent_id));
-                Some(version)
+        let Some(current_version) = self.current_version_id.and_then(|id| self.tree.version(id))
+        else {
+            return None;
+        };
+
+        self.current_version_id = current_version.parent;
+
+        Some(current_version)
+    }
+}
+
+struct ExclusiveBranchTipAndAncestors<'a> {
+    tree: &'a Tree,
+    branch_name: &'a BranchName,
+    current_version_id: Option<VersionId>,
+    at_branch_tip: bool,
+}
+
+impl<'a> Iterator for ExclusiveBranchTipAndAncestors<'a> {
+    type Item = &'a Version;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let Some(current_version) = self.current_version_id.and_then(|id| self.tree.version(id))
+        else {
+            return None;
+        };
+
+        let children_check_count = if self.at_branch_tip { 1 } else { 2 };
+
+        let mut children = self.tree.children(current_version.id);
+        if children.count_is_at_least(children_check_count) {
+            self.current_version_id = None;
+            return None;
+        }
+
+        for (name, tip) in self.tree.branches.iter() {
+            if name == self.branch_name {
+                continue;
+            }
+
+            if *tip == current_version.id {
+                self.current_version_id = None;
+                return None;
             }
         }
+
+        self.at_branch_tip = false;
+
+        Some(current_version)
     }
 }

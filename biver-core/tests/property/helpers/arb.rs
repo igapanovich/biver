@@ -1,5 +1,4 @@
 use crate::helpers::byte_chunk::ByteChunk;
-use crate::helpers::checkout_target::CheckoutTarget;
 use crate::helpers::repository_action::{FileOperation, RepositoryAction};
 use crate::helpers::test_env::TestEnv;
 use crate::helpers::version_path::VersionPath;
@@ -9,13 +8,6 @@ use proptest::sample::Index;
 
 pub fn env() -> impl Strategy<Value = TestEnv> {
     init_then_other_repository_actions().prop_map(TestEnv::from_actions)
-}
-
-pub fn checkout_target() -> impl Strategy<Value = CheckoutTarget> {
-    prop_oneof![
-        3 => any::<Index>().no_shrink().prop_map(CheckoutTarget::Branch),
-        1 => version_path().prop_map(CheckoutTarget::Version),
-    ]
 }
 
 pub fn bytes() -> impl Strategy<Value = ByteChunk> {
@@ -30,7 +22,6 @@ fn repository_action() -> impl Strategy<Value = RepositoryAction> {
     prop_oneof![
         1 => Just(RepositoryAction::Discard),
         4 => Just(RepositoryAction::Commit),
-        1 => checkout_target().prop_map(RepositoryAction::CheckOut),
         9 => file_operation().prop_map(RepositoryAction::ModifyVersionedFile),
     ]
 }

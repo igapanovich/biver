@@ -1,15 +1,14 @@
-use biver_core::data::Repository;
-use biver_core::operations;
+use biver_core::repository::{Session, TryStartSessionResult};
 
-pub trait ReadRepositoryOutcomeExt {
-    fn unwrap(self) -> Repository;
+pub trait UnwrapTryStartSessionExt {
+    fn unwrap(self) -> Session;
 }
 
-impl ReadRepositoryOutcomeExt for operations::read_repository::Outcome {
-    fn unwrap(self) -> Repository {
+impl UnwrapTryStartSessionExt for TryStartSessionResult {
+    fn unwrap(self) -> Session {
         match self {
-            operations::read_repository::Outcome::Initialized(repo) => repo,
-            operations::read_repository::Outcome::NotInitialized => panic!("not initialized"),
+            TryStartSessionResult::Ok(session) => session,
+            TryStartSessionResult::Uninitialized => panic!("not initialized"),
         }
     }
 }

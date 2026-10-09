@@ -1,6 +1,6 @@
 use crate::helpers::byte_chunk::ByteChunk;
-use crate::helpers::checkout_target::CheckoutTarget;
-use crate::helpers::index_ext::IndexExt;
+use crate::helpers::extensions::IndexExt;
+use crate::helpers::version_path::VersionPath;
 use proptest::sample::Index;
 use std::fmt::Debug;
 
@@ -10,7 +10,8 @@ pub enum RepositoryAction {
     Init,
     Commit,
     Discard,
-    CheckOut(CheckoutTarget),
+    CheckOutBranch(Index),
+    CheckOutVersion(VersionPath),
 }
 
 #[derive(Clone)]

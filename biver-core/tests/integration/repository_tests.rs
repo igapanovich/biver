@@ -1,5 +1,5 @@
 use crate::helpers::{samples, test_env};
-use biver_core::operations;
+use biver_core::repository;
 use rstest::rstest;
 use std::error::Error;
 use std::fs;
@@ -16,12 +16,17 @@ use std::fs;
 #[case(samples::SAMPLE7)]
 #[case(samples::SAMPLE8)]
 #[case(samples::SAMPLE9)]
-pub fn init_succeeds(#[case] file_content: &[u8]) -> Result<(), Box<dyn Error>> {
+pub fn initialize_succeeds(#[case] file_content: &[u8]) -> Result<(), Box<dyn Error>> {
     let env = test_env::create_with_versioned_file(file_content)?;
 
-    operations::init(&env.config, &env.repo_paths, None, None)?;
+    let init_ok = repository::initialize(
+        env.config.clone(),
+        env.versioned_file_path.clone(),
+        None,
+        None,
+    )?;
 
-    assert!(operations::read_repository(&env.repo_paths)?.is_initialized());
+    assert!(!init_ok.was_already_initialized);
 
     Ok(())
 }
@@ -38,12 +43,17 @@ pub fn init_succeeds(#[case] file_content: &[u8]) -> Result<(), Box<dyn Error>> 
 #[case(samples::SAMPLE7)]
 #[case(samples::SAMPLE8)]
 #[case(samples::SAMPLE9)]
-pub fn init_does_not_modify_versioned_file(
+pub fn initialize_does_not_modify_versioned_file(
     #[case] file_content: &[u8],
 ) -> Result<(), Box<dyn Error>> {
     let env = test_env::create_with_versioned_file(file_content)?;
 
-    operations::init(&env.config, &env.repo_paths, None, None)?;
+    let init_ok = repository::initialize(
+        env.config.clone(),
+        env.versioned_file_path.clone(),
+        None,
+        None,
+    )?;
 
     let file_content_after_init = fs::read(&env.versioned_file_path)?;
 

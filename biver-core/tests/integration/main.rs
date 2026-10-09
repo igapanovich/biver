@@ -7,4 +7,4 @@ mod test_config;
 mod helpers;
 
 mod commit_tests;
-mod init_tests;
+mod repository_tests;

@@ -1,6 +1,6 @@
 use crate::configuration::Configuration;
 use crate::error::Result;
-use crate::external_command;
+use crate::utilities::external_command;
 use std::path::Path;
 
 pub fn create_patch(config: &Configuration, old: &Path, new: &Path, patch: &Path) -> Result<()> {

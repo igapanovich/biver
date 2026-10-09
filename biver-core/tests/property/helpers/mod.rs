@@ -1,8 +1,7 @@
 pub mod arb;
-pub mod checkout_target;
+mod byte_chunk;
 pub mod difference;
+pub mod extensions;
 pub mod repository_action;
 pub mod test_env;
 pub mod version_path;
-mod byte_chunk;
-mod index_ext;

@@ -19,6 +19,9 @@ pub enum Error {
 
     #[error("error converting UTF string: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
+
+    #[error("attempted to use a broken instance")]
+    Broken,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

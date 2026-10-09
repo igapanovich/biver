@@ -9,7 +9,7 @@ mod helpers;
 mod check_out_tests;
 mod commit_tests;
 mod discard_tests;
-mod reword_tests;
+mod update_description_tests;
 mod init_tests;
 
 const DEFAULT_CASE_COUNT: u32 = 256;

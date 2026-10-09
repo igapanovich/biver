@@ -1,4 +1,4 @@
-use biver_core::configuration::Configuration;
+use biver_core::Configuration;
 
 pub fn create() -> Configuration {
     fn string_vec(collection: &[&str]) -> Vec<String> {

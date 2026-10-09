@@ -1,9 +1,8 @@
-use std::fs::File;
 use std::io;
 use std::io::{BufReader, Read};
 use xxhash_rust::xxh3::Xxh3;
 
-pub fn xxh3_128(file: &File) -> io::Result<u128> {
+pub fn xxh3_128(file: impl Read) -> io::Result<u128> {
     let mut reader = BufReader::new(file);
     let mut hasher = Xxh3::new();
     let mut buffer = [0; 8192];

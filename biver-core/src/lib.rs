@@ -1,15 +1,9 @@
-pub mod configuration;
+mod configuration;
 pub mod data;
-mod diff;
-pub mod error;
-mod extensions;
-mod external_command;
-mod hash;
-mod nickname;
-pub mod operations;
-mod preview;
-mod repository_io;
-mod repository_paths;
+mod error;
+pub mod repository;
 mod temp_file;
+mod utilities;
 
-pub use repository_paths::RepositoryPaths;
+pub use configuration::{Configuration, FileTypeRule};
+pub use error::{Error, Result};

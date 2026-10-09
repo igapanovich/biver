@@ -1,6 +1,6 @@
 use crate::helpers::arb;
+use crate::helpers::extensions::SessionExt;
 use crate::{DEFAULT_CASE_COUNT, GROUP_CASE_MULTIPLIER};
-use biver_core::operations;
 use proptest::prelude::*;
 
 proptest! {
@@ -8,17 +8,19 @@ proptest! {
 
     #[test]
     fn discard_main_group(env in arb::env()) {
-        let head_before = env.repository().head;
-        let branches_before = env.repository().branches;
-        let versions_with_content_before = env.versions_with_content();
+        let session = env.start_session();
 
-        operations::discard(env.config(), env.paths(), &mut env.repository()).unwrap();
+        let head_before = session.tree().head().clone();
+        let branches_before = session.tree().branch_tip_ids().clone();
+        let versions_with_content_before = session.versions_with_content();
 
-        let head_after = env.repository().head;
-        let branches_after = env.repository().branches;
-        let versions_with_content_after = env.versions_with_content();
+        session.discard()?;
 
-        prop_assert!(!env.has_uncommitted_changes(), "discard does not leave uncommitted changes");
+        let head_after = session.tree().head().clone();
+        let branches_after = session.tree().branch_tip_ids().clone();
+        let versions_with_content_after = session.versions_with_content();
+
+        prop_assert_eq!(session.has_uncommitted_changes()?, false, "discard does not leave uncommitted changes");
 
         prop_assert_eq!(head_before, head_after, "discard does not modify head");
 

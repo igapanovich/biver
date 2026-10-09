@@ -12,9 +12,8 @@ pub struct Version {
     pub versioned_file_xxh3_128: u128,
     pub description: String,
     pub parent: Option<VersionId>,
-    pub content_blob_file_name: String,
     pub content_blob_kind: ContentBlobKind,
-    pub preview_blob_file_name: Option<String>,
+    pub has_preview: bool,
 }
 
 impl Version {
