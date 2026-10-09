@@ -1,11 +1,23 @@
 use crate::helpers::checkout_target::CheckoutTarget;
-use crate::helpers::repository_action::{FileOperation, PositionInFile, RepositoryAction};
+use crate::helpers::repository_action::{FileOperation, RepositoryAction};
 use crate::helpers::test_env::TestEnv;
 use crate::helpers::version_path::{VersionPath, VersionPathNode, VersionPathStart};
 use proptest::collection::vec;
 use proptest::prelude::*;
+use proptest::sample::Index;
 
-pub fn bytes() -> impl Strategy<Value = Vec<u8>> {
+pub fn env() -> impl Strategy<Value = TestEnv> {
+    init_then_other_repository_actions().prop_map(TestEnv::from_actions)
+}
+
+pub fn checkout_target() -> impl Strategy<Value = CheckoutTarget> {
+    prop_oneof![
+        3 => any::<Index>().no_shrink().prop_map(CheckoutTarget::Branch),
+        1 => version_path().prop_map(CheckoutTarget::Version),
+    ]
+}
+
+fn bytes() -> impl Strategy<Value = Vec<u8>> {
     prop_oneof![
         10 => vec(any::<u8>(), 2..2048),
         1 => vec(any::<u8>(), 1),
@@ -13,51 +25,34 @@ pub fn bytes() -> impl Strategy<Value = Vec<u8>> {
     ]
 }
 
-pub fn non_empty_bytes() -> impl Strategy<Value = Vec<u8>> {
-    prop_oneof![
-        11 => vec(any::<u8>(), 2..2048),
-        1 => vec(any::<u8>(), 1),
-    ]
-}
-
 fn repository_action() -> impl Strategy<Value = RepositoryAction> {
     prop_oneof![
-        9 => file_operation().prop_map(RepositoryAction::ModifyVersionedFile),
-        4 => Just(RepositoryAction::Commit),
         1 => Just(RepositoryAction::Discard),
-        1 => checkout_target().prop_map(RepositoryAction::CheckOut)
+        4 => Just(RepositoryAction::Commit),
+        1 => checkout_target().prop_map(RepositoryAction::CheckOut),
+        9 => file_operation().prop_map(RepositoryAction::ModifyVersionedFile),
     ]
 }
 
-pub fn file_operation() -> impl Strategy<Value = FileOperation> {
+fn file_operation() -> impl Strategy<Value = FileOperation> {
     prop_oneof![
-        12 => file_operation_insert(),
-        12 => file_operation_remove_range(),
         1 => file_operation_overwrite(),
+        24 => file_operation_splice(),
     ]
 }
 
-fn file_operation_insert() -> impl Strategy<Value = FileOperation> {
-    (file_position(), non_empty_bytes())
-        .prop_map(|(position, bytes)| FileOperation::Insert { position, bytes })
-}
-
-fn file_operation_remove_range() -> impl Strategy<Value = FileOperation> {
-    (file_position(), 1..1024_usize)
-        .prop_map(|(start, length)| FileOperation::RemoveRange { start, length })
+fn file_operation_splice() -> impl Strategy<Value = FileOperation> {
+    (any::<Index>(), any::<Index>(), bytes()).prop_map(|(range_start, range_length, bytes)| {
+        FileOperation::Splice {
+            range_start,
+            range_length,
+            bytes,
+        }
+    })
 }
 
 fn file_operation_overwrite() -> impl Strategy<Value = FileOperation> {
     bytes().prop_map(FileOperation::Overwrite)
-}
-
-fn file_position() -> impl Strategy<Value = PositionInFile> {
-    prop_oneof![
-        4 => any::<usize>().prop_map(PositionInFile::FromStart),
-        4 => any::<usize>().prop_map(PositionInFile::FromEnd),
-        1 => Just(PositionInFile::FromStart(0)),
-        1 => Just(PositionInFile::FromEnd(0)),
-    ]
 }
 
 fn init_then_other_repository_actions() -> impl Strategy<Value = Vec<RepositoryAction>> {
@@ -72,34 +67,29 @@ fn init_then_other_repository_actions() -> impl Strategy<Value = Vec<RepositoryA
     })
 }
 
-pub fn env() -> impl Strategy<Value = TestEnv> {
-    init_then_other_repository_actions().prop_map(TestEnv::from_actions)
-}
-
 fn version_path_start() -> impl Strategy<Value = VersionPathStart> {
+    let tip_of_branch = any::<Index>()
+        .no_shrink()
+        .prop_map(VersionPathStart::TipOfBranch);
+
     prop_oneof![
         Just(VersionPathStart::Root),
         Just(VersionPathStart::Head),
-        any::<usize>().prop_map(VersionPathStart::TipOfBranch)
+        tip_of_branch,
     ]
 }
 
 fn version_path_node() -> impl Strategy<Value = VersionPathNode> {
-    let parent_of = Just(VersionPathNode::Parent);
+    let parent = Just(VersionPathNode::Parent);
 
-    let child_of = any::<usize>().prop_map(|child_num| VersionPathNode::Child(child_num));
+    let child = any::<Index>()
+        .no_shrink()
+        .prop_map(|child_num| VersionPathNode::Child(child_num));
 
-    prop_oneof![parent_of, child_of]
+    prop_oneof![parent, child]
 }
 
 fn version_path() -> impl Strategy<Value = VersionPath> {
     (version_path_start(), vec(version_path_node(), 0..100))
         .prop_map(|(start, nodes)| VersionPath { start, nodes })
-}
-
-pub fn checkout_target() -> impl Strategy<Value = CheckoutTarget> {
-    prop_oneof![
-        3 => any::<usize>().prop_map(CheckoutTarget::Branch),
-        1 => version_path().prop_map(CheckoutTarget::Version),
-    ]
 }

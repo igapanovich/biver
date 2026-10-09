@@ -1,5 +1,5 @@
 use crate::helpers::arb;
-use crate::helpers::checkout_target::ResolveCheckoutTargetExtension;
+use crate::helpers::checkout_target::ResolveCheckoutTargetExt;
 use crate::{DEFAULT_CASE_COUNT, GROUP_CASE_MULTIPLIER};
 use biver_core::operations;
 use proptest::prelude::*;

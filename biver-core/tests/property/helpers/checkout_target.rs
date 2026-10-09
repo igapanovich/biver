@@ -1,26 +1,27 @@
-use crate::helpers::version_path::{VersionPath, VersionPathIdExtension};
+use crate::helpers::version_path::{ResolveVersionPathExt, VersionPath};
 use biver_core::data::Repository;
 use derive_more::IsVariant;
 use itertools::Itertools;
+use proptest::sample::Index;
 
 #[derive(Debug, Clone, IsVariant)]
 pub enum CheckoutTarget {
     Version(VersionPath),
-    Branch(usize),
+    Branch(Index),
 }
 
-pub trait ResolveCheckoutTargetExtension {
+pub trait ResolveCheckoutTargetExt {
     fn resolve_checkout_target(&self, path: &CheckoutTarget) -> String;
 }
 
-impl ResolveCheckoutTargetExtension for Repository {
-    fn resolve_checkout_target(&self, path: &CheckoutTarget) -> String {
-        match path {
-            CheckoutTarget::Version(version) => self.version_path_id(version),
+impl ResolveCheckoutTargetExt for Repository {
+    fn resolve_checkout_target(&self, target: &CheckoutTarget) -> String {
+        match target {
+            CheckoutTarget::Version(path) => self.resolve_version_path(path).id.bs58(),
             CheckoutTarget::Branch(index) => {
-                let branches = self.branch_names().collect_vec();
-                let index = index % branches.len();
-                branches[index].to_string()
+                let mut branches = self.branch_names().collect_vec();
+                branches.sort();
+                index.get(&branches).to_string()
             }
         }
     }

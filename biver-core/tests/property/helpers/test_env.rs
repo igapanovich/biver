@@ -1,12 +1,11 @@
-use crate::helpers::checkout_target::ResolveCheckoutTargetExtension;
-use crate::helpers::repository_action::{FileOperation, PositionInFile, RepositoryAction};
+use crate::helpers::checkout_target::ResolveCheckoutTargetExt;
+use crate::helpers::repository_action::{FileOperation, RepositoryAction};
 use crate::{test_config, test_dir};
 use biver_core::configuration::Configuration;
 use biver_core::data::{Repository, Version};
 use biver_core::{RepositoryPaths, operations};
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::ops::Range;
 use std::path::PathBuf;
 use std::{env, fs};
 
@@ -126,38 +125,22 @@ impl TestEnv {
             FileOperation::Overwrite(bytes) => {
                 fs::write(&self.paths.versioned_file, &bytes).unwrap();
             }
-            FileOperation::Insert { position, bytes } => {
+            FileOperation::Splice {
+                range_start,
+                range_length,
+                bytes,
+            } => {
                 let mut content = fs::read(&self.paths.versioned_file).unwrap();
-                let range = fit_range(position, 0, content.len());
-                content.splice(range, bytes);
-                fs::write(&self.paths.versioned_file, &content).unwrap();
-            }
-            FileOperation::RemoveRange { start, length } => {
-                let mut content = fs::read(&self.paths.versioned_file).unwrap();
-                let range = fit_range(start, length, content.len());
-                content.splice(range, []);
-                fs::write(&self.paths.versioned_file, &content).unwrap();
+                if content.is_empty() {
+                    fs::write(&self.paths.versioned_file, &bytes).unwrap();
+                } else {
+                    let range_start = range_start.index(content.len());
+                    let range_length = range_length.index(content.len() - range_start);
+                    let range_end = range_start + range_length;
+                    content.splice(range_start..range_end, bytes);
+                    fs::write(&self.paths.versioned_file, &content).unwrap();
+                }
             }
         }
     }
-}
-
-fn fit_range(
-    range_start: PositionInFile,
-    range_length: usize,
-    total_length: usize,
-) -> Range<usize> {
-    if range_length >= total_length {
-        return 0..total_length;
-    }
-
-    let max_start = total_length - range_length;
-
-    let start = match range_start {
-        PositionInFile::FromStart(pos) => pos % max_start,
-        PositionInFile::FromEnd(pos) => max_start - (pos % max_start),
-    };
-
-    let end = start + range_length;
-    start..end
 }

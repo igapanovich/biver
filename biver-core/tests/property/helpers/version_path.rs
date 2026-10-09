@@ -1,4 +1,6 @@
-use biver_core::data::Repository;
+use biver_core::data::{Repository, Version};
+use itertools::Itertools;
+use proptest::sample::Index;
 
 #[derive(Debug, Clone)]
 pub struct VersionPath {
@@ -10,41 +12,40 @@ pub struct VersionPath {
 pub enum VersionPathStart {
     Root,
     Head,
-    TipOfBranch(usize),
+    TipOfBranch(Index),
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum VersionPathNode {
-    Child(usize),
+    Child(Index),
     Parent,
 }
 
-pub trait VersionPathIdExtension {
-    fn version_path_id(&self, path: &VersionPath) -> String;
+pub trait ResolveVersionPathExt {
+    fn resolve_version_path(&self, path: &VersionPath) -> &Version;
 }
 
-impl VersionPathIdExtension for Repository {
-    fn version_path_id(&self, path: &VersionPath) -> String {
+impl ResolveVersionPathExt for Repository {
+    fn resolve_version_path(&self, path: &VersionPath) -> &Version {
         let mut current_version = match path.start {
             VersionPathStart::Root => self.root_version(),
             VersionPathStart::Head => self.head_version(),
-            VersionPathStart::TipOfBranch(branch_num) => {
-                let mut branches = self.branch_names().collect::<Vec<_>>();
+            VersionPathStart::TipOfBranch(index) => {
+                let mut branches = self.branch_names().collect_vec();
                 branches.sort();
-                let branch_num = branch_num % branches.len();
-                let branch = branches[branch_num];
-                self.branch_tip_version(branch).unwrap()
+                let index = index.index(branches.len());
+                self.branch_tip_version(branches[index]).unwrap()
             }
         };
 
         for node in &path.nodes {
             match node {
-                VersionPathNode::Child(child_num) => {
-                    let children = self.children(current_version.id).collect::<Vec<_>>();
+                VersionPathNode::Child(index) => {
+                    let children = self.children(current_version.id).collect_vec();
 
                     if !children.is_empty() {
-                        let child_num = child_num % children.len();
-                        current_version = children[child_num];
+                        let index = index.index(children.len());
+                        current_version = children[index];
                     }
                 }
                 VersionPathNode::Parent => {
@@ -55,6 +56,6 @@ impl VersionPathIdExtension for Repository {
             }
         }
 
-        current_version.id.bs58()
+        current_version
     }
 }
