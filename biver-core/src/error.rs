@@ -6,7 +6,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("{0}")]
-    GetProjectDirs(#[from] dirs::GetProjectDirsError),
+    GetProjectDirs(#[from] biver_directories::GetProjectDirsError),
 
     #[error("json deserialization error: {0}")]
     JsonDeserialization(#[from] serde_json::Error),

@@ -14,7 +14,8 @@ itertools.workspace = true
 
 serde_json = "1.0"
 xxhash-rust = { version = "0.8.18", features = ["xxh3"] }
-dirs = { path = "../biver-directories", package = "biver-directories" }
+
+biver-directories = { path = "../biver-directories" }
 
 [dev-dependencies]
 rstest = "0.27.0"

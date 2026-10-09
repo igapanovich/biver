@@ -112,6 +112,7 @@ mod colorization {
 mod prepared {
     use biver_core::data::{Repository, Version, VersionId};
     use chrono_humanize::HumanTime;
+    use itertools::Itertools;
     use std::collections::{HashMap, HashSet};
     use std::fmt;
     use std::fmt::{Display, Formatter};
@@ -372,10 +373,7 @@ mod prepared {
             } else {
                 Some(format!(
                     "->[{}]",
-                    off_screen_branches
-                        .into_iter()
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    off_screen_branches.into_iter().collect_vec().join(", ")
                 ))
             };
 

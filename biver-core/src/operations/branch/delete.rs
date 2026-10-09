@@ -2,6 +2,7 @@ use crate::data::Repository;
 use crate::error::Result;
 use crate::repository_io;
 use crate::repository_paths::RepositoryPaths;
+use itertools::Itertools;
 use std::collections::HashSet;
 
 pub enum Outcome {
@@ -38,7 +39,7 @@ pub fn delete(paths: &RepositoryPaths, repo: &mut Repository, name: &str) -> Res
         .version_and_ancestors(branch_leaf_version_id)
         .map(|v| v.id)
         .take_while(|id| !versions_on_other_branches.contains(id))
-        .collect::<Vec<_>>();
+        .collect_vec();
 
     let head_version = repo.head_version();
 

@@ -20,7 +20,7 @@ pub struct FileTypeRule {
 }
 
 pub fn read() -> Result<Configuration, Error> {
-    let config_dir = dirs::config()?;
+    let config_dir = biver_directories::config()?;
     fs::create_dir_all(&config_dir)?;
     let config_file = config_dir.join(CONFIG_FILE_NAME);
 
@@ -43,7 +43,7 @@ pub enum Error {
     Deserialization(#[from] toml::de::Error),
 
     #[error("{0}")]
-    GetProjectDirs(#[from] dirs::GetProjectDirsError),
+    GetProjectDirs(#[from] biver_directories::GetProjectDirsError),
 }
 
 #[test]

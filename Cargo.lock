@@ -639,6 +639,7 @@ dependencies = [
  "eframe",
  "egui",
  "image",
+ "itertools 0.15.0",
  "toml",
  "tracing-subscriber",
 ]

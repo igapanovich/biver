@@ -3,6 +3,7 @@ use crate::data::{ContentBlobKind, Repository, VersionId};
 use crate::error::{Error, Result};
 use crate::repository_paths::RepositoryPaths;
 use crate::{diff, external_command, temp_file};
+use itertools::Itertools;
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
@@ -133,7 +134,7 @@ pub fn try_store_version_preview(
                 None
             }
         })
-        .collect::<Vec<_>>();
+        .collect_vec();
 
     if file_type_rules.len() > 1 {
         return Err(Error::InvalidConfig(format!(
