@@ -18,7 +18,7 @@ pub fn checkout_target() -> impl Strategy<Value = CheckoutTarget> {
     ]
 }
 
-fn bytes() -> impl Strategy<Value = ByteChunk> {
+pub fn bytes() -> impl Strategy<Value = ByteChunk> {
     prop_oneof![
         10 => vec(any::<u8>(), 2..2048).prop_map(ByteChunk::from),
         1 => vec(any::<u8>(), 1).prop_map(ByteChunk::from),
