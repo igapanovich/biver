@@ -1,5 +1,5 @@
 mod index_ext;
-mod session_ext;
+mod iterator_ext;
 
 pub use index_ext::IndexExt;
-pub use session_ext::SessionExt;
+pub use iterator_ext::IteratorExt;

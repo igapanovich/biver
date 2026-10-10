@@ -1,7 +1,10 @@
 pub mod arb;
 mod byte_chunk;
-pub mod difference;
+pub mod diff;
 pub mod extensions;
+pub mod hash_map_diff;
 pub mod repository_action;
+pub mod snapshot;
+pub mod snapshot_diff;
 pub mod test_env;
 pub mod version_path;

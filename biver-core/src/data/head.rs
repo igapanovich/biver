@@ -2,7 +2,7 @@ use crate::data::{BranchName, VersionId};
 use derive_more::IsVariant;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, IsVariant)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, IsVariant)]
 pub enum Head {
     Branch(BranchName),
     Version(VersionId),

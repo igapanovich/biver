@@ -16,8 +16,8 @@ impl Tree {
         &self.head
     }
 
-    pub fn versions(&self) -> &[Version] {
-        self.versions.as_slice()
+    pub fn versions(&self) -> impl Iterator<Item = &Version> {
+        self.versions.iter()
     }
 
     pub fn version(&self, id: VersionId) -> Option<&Version> {
@@ -148,11 +148,11 @@ impl Tree {
             .and_then(|version_id| self.version(*version_id))
     }
 
-    pub fn exclusive_branch_tip_and_ancestors<'a>(
+    pub fn branch_tip_and_ancestors_exclusive<'a>(
         &'a self,
         branch_name: &'a BranchName,
     ) -> impl Iterator<Item = &'a Version> {
-        ExclusiveBranchTipAndAncestors {
+        BranchTipAndAncestorsExclusive {
             tree: self,
             branch_name,
             current_version_id: self.branches.get(branch_name).copied(),
@@ -181,14 +181,14 @@ impl<'a> Iterator for VersionAndAncestors<'a> {
     }
 }
 
-struct ExclusiveBranchTipAndAncestors<'a> {
+struct BranchTipAndAncestorsExclusive<'a> {
     tree: &'a Tree,
     branch_name: &'a BranchName,
     current_version_id: Option<VersionId>,
     at_branch_tip: bool,
 }
 
-impl<'a> Iterator for ExclusiveBranchTipAndAncestors<'a> {
+impl<'a> Iterator for BranchTipAndAncestorsExclusive<'a> {
     type Item = &'a Version;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -231,7 +231,7 @@ impl Session {
 
             let erased_versions = self
                 .tree
-                .exclusive_branch_tip_and_ancestors(head_branch)
+                .branch_tip_and_ancestors_exclusive(head_branch)
                 .take_while(|v| v.id != stop_at_version_id)
                 .collect_vec();
 
@@ -329,7 +329,7 @@ impl Session {
 
             let erased_versions = self
                 .tree
-                .exclusive_branch_tip_and_ancestors(&branch_name)
+                .branch_tip_and_ancestors_exclusive(&branch_name)
                 .collect_vec();
 
             let head_version_id = self.tree.head_version_id();

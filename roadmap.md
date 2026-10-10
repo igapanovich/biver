@@ -13,3 +13,4 @@
 
 # Backlog
 - Support matching file type rules by mime type
+- Use clippy

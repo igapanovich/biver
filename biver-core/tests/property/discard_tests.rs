@@ -1,5 +1,4 @@
 use crate::helpers::arb;
-use crate::helpers::extensions::SessionExt;
 use crate::{DEFAULT_CASE_COUNT, GROUP_CASE_MULTIPLIER};
 use proptest::prelude::*;
 
@@ -10,22 +9,15 @@ proptest! {
     fn discard_main_group(env in arb::env()) {
         let session = env.start_session();
 
-        let head_before = session.tree().head().clone();
-        let branches_before = session.tree().branch_tip_ids().clone();
-        let versions_with_content_before = session.versions_with_content();
+        let before = env.snapshot(&session);
 
         session.discard()?;
 
-        let head_after = session.tree().head().clone();
-        let branches_after = session.tree().branch_tip_ids().clone();
-        let versions_with_content_after = session.versions_with_content();
+        let after = env.snapshot(&session);
 
-        prop_assert_eq!(session.has_uncommitted_changes()?, false, "discard does not leave uncommitted changes");
-
-        prop_assert_eq!(head_before, head_after, "discard does not modify head");
-
-        prop_assert_eq!(branches_before, branches_after, "discard does not modify branches");
-
-        prop_assert_eq!(versions_with_content_before, versions_with_content_after, "discard does not modify versions");
+        prop_assert!(!after.has_uncommitted_changes, "discard does not leave uncommitted changes");
+        prop_assert_eq!(before.head, after.head, "discard does not modify head");
+        prop_assert_eq!(before.branches, after.branches, "discard does not modify branches");
+        prop_assert_eq!(before.versions, after.versions, "discard does not modify versions");
     }
 }

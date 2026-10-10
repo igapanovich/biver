@@ -1,4 +1,6 @@
+use crate::helpers::extensions::IndexExt;
 use crate::helpers::repository_action::{FileOperation, RepositoryAction};
+use crate::helpers::snapshot::Snapshot;
 use crate::helpers::version_path::ResolveVersionPathExt;
 use crate::{test_config, test_dir};
 use biver_core::repository::{Session, TryStartSessionResult};
@@ -32,7 +34,7 @@ impl Debug for TestEnv {
 }
 
 impl TestEnv {
-    pub fn new() -> TestEnv {
+    pub fn uninitialized() -> TestEnv {
         let test_dir = test_dir::create().unwrap();
         let config = test_config::create();
         let versioned_file_path = test_dir.join("file");
@@ -46,7 +48,7 @@ impl TestEnv {
     }
 
     pub fn from_actions(actions: impl IntoIterator<Item = RepositoryAction>) -> TestEnv {
-        let mut env = TestEnv::new();
+        let mut env = TestEnv::uninitialized();
 
         let mut session = None;
 
@@ -76,8 +78,8 @@ impl TestEnv {
         }
     }
 
-    pub fn versioned_file_content(&self) -> Vec<u8> {
-        fs::read(&self.versioned_file_path).unwrap()
+    pub fn snapshot(&self, session: &Session) -> Snapshot {
+        Snapshot::new(self.versioned_file_path(), session)
     }
 
     fn run_action(&self, session: &mut Option<Session>, action: RepositoryAction) {
@@ -105,7 +107,8 @@ impl TestEnv {
             }
             RepositoryAction::CheckOutBranch(branch_index) => {
                 let session = session.as_mut().unwrap();
-                let branch_name = *branch_index.get(&session.tree().branch_names().collect_vec());
+                let branch_name =
+                    branch_index.get_copied(&session.tree().branch_names().collect_vec());
                 session.check_out_branch(branch_name.clone()).unwrap();
             }
             RepositoryAction::CheckOutVersion(version_path) => {
