@@ -20,4 +20,8 @@ impl VersionId {
             .and_then(|bytes| Uuid::from_slice(&bytes).ok())
             .map(Self)
     }
+
+    pub fn from_u128(number: u128) -> Self {
+        Self(Uuid::from_u128(number))
+    }
 }

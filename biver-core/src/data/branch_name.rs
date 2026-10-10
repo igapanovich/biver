@@ -1,11 +1,18 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct BranchName(String);
 
 impl Default for BranchName {
     fn default() -> BranchName {
         BranchName::new("main".to_string()).unwrap()
+    }
+}
+
+impl Debug for BranchName {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.0.fmt(f)
     }
 }
 

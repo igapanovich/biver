@@ -2,9 +2,11 @@ use crate::helpers::byte_chunk::ByteChunk;
 use crate::helpers::repository_action::{FileOperation, RepositoryAction};
 use crate::helpers::test_env::TestEnv;
 use crate::helpers::version_path::VersionPath;
+use biver_core::data::{BranchName, VersionId};
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
+use proptest::string::string_regex;
 
 pub fn env() -> impl Strategy<Value = TestEnv> {
     init_then_other_repository_actions().prop_map(TestEnv::from_actions)
@@ -64,4 +66,18 @@ pub fn version_path() -> impl Strategy<Value = VersionPath> {
         branch,
         depth_from_tip,
     })
+}
+
+pub fn branch_name() -> impl Strategy<Value = BranchName> {
+    string_regex("[A-Za-z0-9_-]+")
+        .unwrap()
+        .prop_map(|n| BranchName::new(n).unwrap())
+}
+
+pub fn branch_name_option() -> impl Strategy<Value = Option<BranchName>> {
+    prop_oneof![Just(None), branch_name().prop_map(Some)]
+}
+
+pub fn version_id() -> impl Strategy<Value = VersionId> {
+    any::<u128>().prop_map(VersionId::from_u128)
 }

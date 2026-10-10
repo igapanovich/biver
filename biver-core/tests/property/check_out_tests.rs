@@ -76,3 +76,41 @@ proptest! {
         }
     }
 }
+
+proptest! {
+    #[test]
+    fn check_out_branch_fails_when_target_branch_is_invalid(env in arb::env(), branch_name in arb::branch_name()) {
+        let mut session = env.start_session();
+
+        prop_assume!(session.tree().branch_names().all(|b| b != &branch_name));
+
+        session.discard()?;
+
+        let before = env.snapshot(&session);
+
+        let result = session.check_out_branch(branch_name)?;
+
+        let after = env.snapshot(&session);
+
+        prop_assert!(result.is_branch_not_found());
+        prop_assert_eq!(before, after);
+    }
+
+    #[test]
+    fn check_out_version_fails_when_target_version_is_invalid(env in arb::env(), version_id in arb::version_id()) {
+        let mut session = env.start_session();
+
+        prop_assume!(session.tree().versions().all(|v| v.id != version_id));
+
+        session.discard()?;
+
+        let before = env.snapshot(&session);
+
+        let result = session.check_out_version(version_id)?;
+
+        let after = env.snapshot(&session);
+
+        prop_assert!(result.is_version_not_found());
+        prop_assert_eq!(before, after);
+    }
+}
