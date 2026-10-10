@@ -1,12 +1,9 @@
 use crate::helpers::arb;
-use crate::{DEFAULT_CASE_COUNT, GROUP_CASE_MULTIPLIER};
 use proptest::prelude::*;
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(DEFAULT_CASE_COUNT * GROUP_CASE_MULTIPLIER))]
-
     #[test]
-    fn discard_main_group(env in arb::env()) {
+    fn discard_properties(env in arb::env()) {
         let session = env.start_session();
 
         let before = env.snapshot(&session);

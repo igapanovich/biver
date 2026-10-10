@@ -53,7 +53,7 @@ fn run_command(command: Command) -> Result<()> {
         } => {
             let session = Session::new(versioned_file_path)?;
             match session {
-                NewSession::Uninitialized(_) => println!("Not initialized")
+                NewSession::Uninitialized(_) => println!("Not initialized"),
             }
             let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
             let repo = ops::read_repository(&paths)?;

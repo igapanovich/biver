@@ -32,6 +32,10 @@ impl BranchName {
 
         Ok(BranchName(branch_name))
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Debug)]

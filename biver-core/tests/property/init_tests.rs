@@ -7,7 +7,7 @@ use std::io::Read;
 
 proptest! {
     #[test]
-    fn init_main_group(init_bytes in arb::bytes()) {
+    fn init_properties(init_bytes in arb::bytes()) {
         let env = TestEnv::uninitialized();
 
         fs::write(&env.versioned_file_path(), &init_bytes)?;

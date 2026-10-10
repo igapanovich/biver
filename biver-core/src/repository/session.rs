@@ -408,40 +408,40 @@ impl Session {
     }
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum CommitResult {
     Ok,
     NoUncommittedChanges,
     HeadMustBeOnBranch,
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum CheckOutBranchResult {
     Ok,
     HasUncommittedChanges,
     BranchNotFound,
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum CheckOutVersionResult {
     Ok,
     HasUncommittedChanges,
     VersionNotFound,
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum UpdateDescriptionResult {
     Ok,
     VersionNotFound,
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum RestoreVersionResult {
     Ok,
     WouldOverwriteUncommittedChanges,
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum SoftResetResult {
     Ok(CleanupResult),
     HeadMustBeBranch,
@@ -449,28 +449,28 @@ pub enum SoftResetResult {
     ResetRangeOverlapsWithOtherBranches,
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum CreateBranchResult {
     Ok,
     AlreadyExists,
     InvalidBranchTipId,
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum RenameBranchResult {
     Ok,
     NewNameAlreadyExists,
     InvalidOldName,
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum DeleteBranchResult {
     Ok(CleanupResult),
     BranchDoesNotExist,
     CannotDeleteHead,
 }
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum CleanupResult {
     Ok,
     Failed,

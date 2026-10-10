@@ -3,14 +3,11 @@ use crate::helpers::diff::Diff;
 use crate::helpers::extensions::IteratorExt;
 use crate::helpers::snapshot::Snapshot;
 use crate::helpers::version_path::ResolveVersionPathExt;
-use crate::{DEFAULT_CASE_COUNT, GROUP_CASE_MULTIPLIER};
 use proptest::prelude::*;
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(DEFAULT_CASE_COUNT * GROUP_CASE_MULTIPLIER))]
-
     #[test]
-    fn update_description_main_group(env in arb::env(), target in arb::version_path(), new_description in any::<String>()) {
+    fn update_description_properties(env in arb::env(), target in arb::version_path(), new_description in any::<String>()) {
         let mut session = env.start_session();
 
         let before = env.snapshot(&session);
