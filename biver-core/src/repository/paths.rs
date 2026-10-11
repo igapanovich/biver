@@ -7,6 +7,7 @@ pub struct RepositoryPaths {
     versioned_file: PathBuf,
     repository_dir: PathBuf,
     tree_file: PathBuf,
+    lock_file: PathBuf,
 }
 
 impl RepositoryPaths {
@@ -20,14 +21,17 @@ impl RepositoryPaths {
             None => OsString::from("biver"),
         };
 
-        let repository_dir_path = versioned_file_path.with_extension(extension);
+        let repository_dir = versioned_file_path.with_extension(extension);
 
-        let data_file_path = repository_dir_path.join("data.json");
+        let tree_file = repository_dir.join("data.json");
+
+        let lock_file = repository_dir.join("lock");
 
         RepositoryPaths {
             versioned_file: versioned_file_path,
-            repository_dir: repository_dir_path,
-            tree_file: data_file_path,
+            repository_dir,
+            tree_file,
+            lock_file,
         }
     }
 
@@ -37,6 +41,10 @@ impl RepositoryPaths {
 
     pub fn repository_dir(&self) -> &Path {
         &self.repository_dir
+    }
+
+    pub fn lock_file(&self) -> &Path {
+        &self.lock_file
     }
 
     pub fn tree_file(&self) -> &Path {

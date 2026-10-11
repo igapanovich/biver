@@ -48,7 +48,7 @@ pub fn initialize_does_not_modify_versioned_file(
 ) -> Result<(), Box<dyn Error>> {
     let env = test_env::create_with_versioned_file(file_content)?;
 
-    let init_ok = repository::initialize(
+    repository::initialize(
         env.config.clone(),
         env.versioned_file_path.clone(),
         None,

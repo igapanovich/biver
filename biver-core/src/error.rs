@@ -22,6 +22,9 @@ pub enum Error {
 
     #[error("attempted to use a broken instance")]
     Broken,
+
+    #[error("repository is locked")]
+    RepositoryLocked,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

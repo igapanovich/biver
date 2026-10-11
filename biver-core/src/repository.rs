@@ -16,7 +16,7 @@ mod session;
 
 pub use session::*;
 
-#[derive(IsVariant)]
+#[derive(Debug, IsVariant)]
 pub enum TryStartSessionResult {
     Ok(Session),
     Uninitialized,
@@ -30,7 +30,7 @@ pub fn try_start_session(
     let tree = io::read_tree(&paths)?;
 
     match tree {
-        Some(tree) => Ok(TryStartSessionResult::Ok(Session::new(
+        Some(tree) => Ok(TryStartSessionResult::Ok(Session::try_new(
             config, paths, tree,
         )?)),
         None => Ok(TryStartSessionResult::Uninitialized),
@@ -53,7 +53,7 @@ pub fn initialize(
 
     if let Some(tree) = tree {
         return Ok(InitializeResult {
-            session: Session::new(config, paths, tree)?,
+            session: Session::try_new(config, paths, tree)?,
             was_already_initialized: true,
         });
     }
@@ -97,7 +97,7 @@ pub fn initialize(
     io::write_tree(&paths, &tree)?;
 
     Ok(InitializeResult {
-        session: Session::new(config, paths, tree)?,
+        session: Session::try_new(config, paths, tree)?,
         was_already_initialized: false,
     })
 }

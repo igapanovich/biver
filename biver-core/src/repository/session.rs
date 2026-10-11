@@ -8,7 +8,7 @@ use chrono::Utc;
 use derive_more::IsVariant;
 use itertools::Itertools;
 use std::fs;
-use std::fs::File;
+use std::fs::{File, OpenOptions, TryLockError};
 use std::io::Read;
 use std::path::Path;
 
@@ -37,27 +37,43 @@ macro_rules! use_break_non_critical {
     }};
 }
 
+#[derive(Debug)]
 pub struct Session {
     config: Configuration,
     paths: RepositoryPaths,
     tree: Tree,
     broken: bool,
+    _lock: File,
 }
 
 impl Session {
-    pub(crate) fn new(
+    pub(crate) fn try_new(
         config: Configuration,
         paths: RepositoryPaths,
         tree: Tree,
     ) -> Result<Session> {
-        // TODO FS mutex
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(paths.lock_file())?;
 
-        Ok(Session {
+        if let Err(err) = lock.try_lock() {
+            return match err {
+                TryLockError::WouldBlock => Err(Error::RepositoryLocked),
+                TryLockError::Error(err) => Err(err.into()),
+            };
+        }
+
+        let session = Session {
             config,
             paths,
             tree,
+            _lock: lock,
             broken: false,
-        })
+        };
+
+        Ok(session)
     }
 
     pub fn tree(&self) -> &Tree {
