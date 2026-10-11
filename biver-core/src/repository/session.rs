@@ -126,7 +126,7 @@ impl Session {
 
             let has_preview = io::try_store_version_preview(
                 &self.config,
-                &self.paths.preview_blob_path(new_version_id),
+                &self.paths.preview_path(new_version_id),
                 &self.paths.versioned_file(),
             )?;
 
@@ -414,7 +414,7 @@ impl Session {
 
         for id in version_ids.into_iter() {
             if fs::remove_file(self.paths.content_blob_path(id)).is_err()
-                || fs::remove_file(self.paths.preview_blob_path(id)).is_err()
+                || fs::remove_file(self.paths.preview_path(id)).is_err()
             {
                 cleanup_result = CleanupResult::Failed;
             }

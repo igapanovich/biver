@@ -27,7 +27,7 @@ proptest! {
 
         let diff = Snapshot::diff(&before, &after);
 
-        prop_assert!(diff.removed_versions.len() <= 1, "update_description modifies at most one version");
         prop_assert!(diff.inserted_versions.len() <= 1, "update_description modifies at most one version");
+        prop_assert_eq!(diff.inserted_versions.len(), diff.removed_versions.len());
     }
 }

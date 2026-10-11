@@ -58,9 +58,10 @@ pub fn initialize(
         });
     }
 
-    if !fs::exists(paths.repository_dir())? {
-        fs::create_dir(paths.repository_dir())?;
-    }
+    fs::create_dir_all(paths.repository_dir())?;
+    fs::create_dir_all(paths.content_blob_dir())?;
+    fs::create_dir_all(paths.preview_dir())?;
+    fs::create_dir_all(paths.backup_dir())?;
 
     let versioned_file_xxh3_128 = hash::xxh3_128(File::open(&paths.versioned_file())?)?;
     let versioned_file_length = fs::metadata(&paths.versioned_file())?.len();
@@ -70,7 +71,7 @@ pub fn initialize(
     let branch = branch.unwrap_or_default();
 
     let content_blob_file_path = paths.content_blob_path(new_version_id);
-    let preview_blob_file_path = paths.preview_blob_path(new_version_id);
+    let preview_blob_file_path = paths.preview_path(new_version_id);
 
     let has_preview =
         io::try_store_version_preview(&config, &preview_blob_file_path, &paths.versioned_file())?;

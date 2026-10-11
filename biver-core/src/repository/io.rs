@@ -23,11 +23,11 @@ pub fn read_tree(paths: &RepositoryPaths) -> Result<Option<Tree>> {
 pub fn write_tree(paths: &RepositoryPaths, repo: &Tree) -> Result<()> {
     assert!(repo.valid(), "Repository data is not valid: {:#?}", repo);
 
-    let backup1 = paths.file_path("data_backup1.json");
-    let backup2 = paths.file_path("data_backup2.json");
-    let backup3 = paths.file_path("data_backup3.json");
-    let backup4 = paths.file_path("data_backup4.json");
-    let backup5 = paths.file_path("data_backup5.json");
+    let backup1 = paths.tree_backup1_file();
+    let backup2 = paths.tree_backup2_file();
+    let backup3 = paths.tree_backup3_file();
+    let backup4 = paths.tree_backup4_file();
+    let backup5 = paths.tree_backup5_file();
 
     rotate_backup(&backup4, &backup5, Duration::from_hours(24))?;
     rotate_backup(&backup3, &backup4, Duration::from_hours(5))?;
