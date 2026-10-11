@@ -48,7 +48,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub(crate) fn try_new(
+    pub(crate) fn new(
         config: Configuration,
         paths: RepositoryPaths,
         tree: Tree,

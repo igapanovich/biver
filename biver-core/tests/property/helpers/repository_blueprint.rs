@@ -1,4 +1,4 @@
-use crate::helpers::extensions::{BiverResultUnwrap, IndexExt};
+use crate::helpers::extensions::{BiverResultUnwrap, IndexExt, UnwrapExt};
 use crate::helpers::file_operation::{FileOperation, FileOperations};
 use biver_core::data::BranchName;
 use biver_core::repository::{CommitResult, CreateBranchResult, Session};
@@ -48,15 +48,19 @@ impl InitialBranchBlueprint {
     fn build(&self, config: Configuration, versioned_file_path: &Path) -> Session {
         self.first_version.changes.execute(&versioned_file_path);
 
-        let init_ok = repository::initialize(
-            config,
+        let init_result = repository::initialize(
+            config.clone(),
             versioned_file_path.to_path_buf(),
             self.name.clone(),
             self.first_version.description.clone(),
         )
         .unwrap();
 
-        let mut session = init_ok.session;
+        assert!(init_result.is_ok());
+
+        let mut session = repository::try_start_session(config, versioned_file_path.to_path_buf())
+            .unwrap()
+            .unwrap();
 
         for v in &self.following_versions {
             v.changes.execute(&versioned_file_path);

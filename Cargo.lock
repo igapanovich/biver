@@ -628,7 +628,7 @@ dependencies = [
 
 [[package]]
 name = "biver"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "biver-configuration",
  "biver-core",
@@ -646,7 +646,7 @@ dependencies = [
 
 [[package]]
 name = "biver-configuration"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "biver-directories",
  "serde",
@@ -656,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "biver-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "biver-directories",
  "bs58",
@@ -674,7 +674,7 @@ dependencies = [
 
 [[package]]
 name = "biver-directories"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "directories",
 ]

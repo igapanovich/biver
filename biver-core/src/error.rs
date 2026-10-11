@@ -25,6 +25,9 @@ pub enum Error {
 
     #[error("repository is locked")]
     RepositoryLocked,
+
+    #[error("repository schema is incompatible: {0}")]
+    IncompatibleSchemaVersion(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

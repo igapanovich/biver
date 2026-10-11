@@ -1,4 +1,5 @@
 use crate::helpers::arb;
+use crate::helpers::extensions::UnwrapExt;
 use crate::helpers::test_env::TestEnv;
 use biver_core::repository;
 use proptest::prelude::*;
@@ -12,9 +13,11 @@ proptest! {
 
         fs::write(&env.versioned_file_path(), &init_bytes)?;
 
-        let init_ok = repository::initialize(env.config().clone(), env.versioned_file_path().to_path_buf(), branch_name, description)?;
+        let init_result = repository::initialize(env.config().clone(), env.versioned_file_path().to_path_buf(), branch_name, description)?;
 
-        let session = init_ok.session;
+        prop_assert!(init_result.is_ok());
+
+        let session = repository::try_start_session(env.config().clone(), env.versioned_file_path().to_path_buf())?.unwrap();
         let tree = session.tree();
 
         let mut root_content = Vec::new();

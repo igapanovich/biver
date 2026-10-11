@@ -1,14 +1,14 @@
-use crate::Configuration;
 use crate::data::{BranchName, ContentBlobKind, Head, Tree, Version, VersionId};
 use crate::error::Result;
 use crate::utilities::{hash, nickname};
+use crate::{Configuration, Error};
 use chrono::Utc;
 use derive_more::IsVariant;
-use paths::RepositoryPaths;
+pub use paths::RepositoryPaths;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 mod common;
 mod paths;
@@ -17,6 +17,8 @@ mod session;
 
 use crate::repository::common::try_store_preview;
 pub use session::*;
+
+const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, IsVariant)]
 pub enum TryStartSessionResult {
@@ -29,19 +31,24 @@ pub fn try_start_session(
     versioned_file_path: PathBuf,
 ) -> Result<TryStartSessionResult> {
     let paths = RepositoryPaths::new(versioned_file_path);
-    let tree = common::read_tree(&paths)?;
 
-    match tree {
-        Some(tree) => Ok(TryStartSessionResult::Ok(Session::try_new(
-            config, paths, tree,
-        )?)),
-        None => Ok(TryStartSessionResult::NotInitialized),
+    if !initialized_internal(&paths)? {
+        return Ok(TryStartSessionResult::NotInitialized);
     }
+
+    validate_schema_version(&paths)?;
+
+    let tree = read_tree(&paths)?;
+
+    Ok(TryStartSessionResult::Ok(Session::new(
+        config, paths, tree,
+    )?))
 }
 
-pub struct InitializeResult {
-    pub session: Session,
-    pub was_already_initialized: bool,
+#[derive(Debug, IsVariant)]
+pub enum InitializeResult {
+    Ok,
+    AlreadyInitialized,
 }
 
 pub fn initialize(
@@ -51,19 +58,17 @@ pub fn initialize(
     description: String,
 ) -> Result<InitializeResult> {
     let paths = RepositoryPaths::new(versioned_file_path);
-    let tree = common::read_tree(&paths)?;
 
-    if let Some(tree) = tree {
-        return Ok(InitializeResult {
-            session: Session::try_new(config, paths, tree)?,
-            was_already_initialized: true,
-        });
+    if initialized_internal(&paths)? {
+        return Ok(InitializeResult::AlreadyInitialized);
     }
 
     fs::create_dir_all(paths.repository_dir())?;
     fs::create_dir_all(paths.content_blob_dir())?;
     fs::create_dir_all(paths.preview_dir())?;
     fs::create_dir_all(paths.backup_dir())?;
+
+    fs::write(paths.schema_version_file(), SCHEMA_VERSION.to_string())?;
 
     let versioned_file_xxh3_128 = hash::xxh3_128(File::open(&paths.versioned_file())?)?;
     let versioned_file_length = fs::metadata(&paths.versioned_file())?.len();
@@ -98,8 +103,38 @@ pub fn initialize(
     fs::copy(&paths.versioned_file(), &content_blob_file_path)?;
     common::write_tree(&paths, &tree)?;
 
-    Ok(InitializeResult {
-        session: Session::try_new(config, paths, tree)?,
-        was_already_initialized: false,
-    })
+    Ok(InitializeResult::Ok)
+}
+
+pub fn initialized(versioned_file_path: &Path) -> Result<bool> {
+    Ok(fs::exists(paths::tree_file(versioned_file_path))?)
+}
+
+fn initialized_internal(paths: &RepositoryPaths) -> Result<bool> {
+    Ok(fs::exists(paths.tree_file())?)
+}
+
+fn validate_schema_version(paths: &RepositoryPaths) -> Result<()> {
+    if !fs::exists(paths.schema_version_file())? {
+        return Err(Error::IncompatibleSchemaVersion("".to_string()));
+    }
+
+    let schema_version_str = fs::read_to_string(paths.schema_version_file())?;
+
+    let Ok(schema_version) = schema_version_str.parse::<u32>() else {
+        return Err(Error::IncompatibleSchemaVersion(schema_version_str));
+    };
+
+    if schema_version != SCHEMA_VERSION {
+        return Err(Error::IncompatibleSchemaVersion(schema_version_str));
+    }
+
+    Ok(())
+}
+
+fn read_tree(paths: &RepositoryPaths) -> Result<Tree> {
+    let data_file_contents = fs::read(paths.tree_file())?;
+    let repository_data = serde_json::from_slice(&data_file_contents)?;
+
+    Ok(repository_data)
 }

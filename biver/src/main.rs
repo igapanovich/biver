@@ -6,8 +6,8 @@ use biver_core::data::BranchName;
 use biver_core::repository;
 use biver_core::repository::{
     AmendResult, CheckOutBranchResult, CheckOutVersionResult, CommitResult, CreateBranchResult,
-    DeleteBranchResult, RenameBranchResult, RestoreVersionResult, Session, SoftResetResult,
-    TryStartSessionResult, UpdateDescriptionResult,
+    DeleteBranchResult, InitializeResult, RenameBranchResult, RestoreVersionResult, Session,
+    SoftResetResult, TryStartSessionResult, UpdateDescriptionResult,
 };
 use clap::Parser;
 use colored::Colorize;
@@ -118,17 +118,16 @@ fn run_command(command: Command) -> Result<()> {
                 }
             };
 
-            let init_ok = repository::initialize(
+            let init_result = repository::initialize(
                 config,
                 versioned_file_path,
                 branch_name,
                 description.unwrap_or_default(),
             )?;
 
-            if init_ok.was_already_initialized {
-                warning("Already initialized")
-            } else {
-                success_ok()
+            match init_result {
+                InitializeResult::Ok => success_ok(),
+                InitializeResult::AlreadyInitialized => warning("Already initialized"),
             }
         }
 

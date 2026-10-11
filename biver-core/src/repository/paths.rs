@@ -15,35 +15,27 @@ pub struct RepositoryPaths {
     tree_backup3_file: PathBuf,
     tree_backup4_file: PathBuf,
     tree_backup5_file: PathBuf,
+    schema_version: PathBuf,
     lock_file: PathBuf,
 }
 
 impl RepositoryPaths {
     pub fn new(versioned_file_path: PathBuf) -> Self {
-        let extension = match versioned_file_path.extension() {
-            Some(extension) => {
-                let mut extension = OsString::from(extension);
-                extension.push(".biver");
-                extension
-            }
-            None => OsString::from("biver"),
-        };
-
-        let repository_dir = versioned_file_path.with_extension(extension);
-
+        let repository_dir = repository_dir(&versioned_file_path);
         let backup_dir = repository_dir.join("backup");
 
         RepositoryPaths {
             versioned_file: versioned_file_path,
             content_blob_dir: repository_dir.join("content"),
             preview_dir: repository_dir.join("preview"),
-            tree_file: repository_dir.join("data.json"),
+            tree_file: tree_file_internal(&repository_dir),
             tree_backup1_file: backup_dir.join("data_backup1.json"),
             tree_backup2_file: backup_dir.join("data_backup2.json"),
             tree_backup3_file: backup_dir.join("data_backup3.json"),
             tree_backup4_file: backup_dir.join("data_backup4.json"),
             tree_backup5_file: backup_dir.join("data_backup5.json"),
             backup_dir,
+            schema_version: repository_dir.join("schema_version"),
             lock_file: repository_dir.join("lock"),
             repository_dir,
         }
@@ -67,6 +59,10 @@ impl RepositoryPaths {
 
     pub fn backup_dir(&self) -> &Path {
         &self.backup_dir
+    }
+
+    pub fn schema_version_file(&self) -> &Path {
+        &self.schema_version
     }
 
     pub fn lock_file(&self) -> &Path {
@@ -104,6 +100,27 @@ impl RepositoryPaths {
     pub fn preview_path(&self, version_id: VersionId) -> PathBuf {
         self.preview_dir.join(version_id_file_name(version_id))
     }
+}
+
+pub fn tree_file(versioned_file_path: &Path) -> PathBuf {
+    tree_file_internal(&repository_dir(versioned_file_path))
+}
+
+fn tree_file_internal(repository_dir: &Path) -> PathBuf {
+    repository_dir.join("data")
+}
+
+fn repository_dir(versioned_file_path: &Path) -> PathBuf {
+    let extension = match versioned_file_path.extension() {
+        Some(extension) => {
+            let mut extension = OsString::from(extension);
+            extension.push(".biver");
+            extension
+        }
+        None => OsString::from("biver"),
+    };
+
+    versioned_file_path.with_extension(extension)
 }
 
 fn version_id_file_name(version_id: VersionId) -> String {

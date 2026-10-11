@@ -8,17 +8,6 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-pub fn read_tree(paths: &RepositoryPaths) -> Result<Option<Tree>> {
-    if !fs::exists(&paths.tree_file())? {
-        return Ok(None);
-    }
-
-    let data_file_contents = fs::read(paths.tree_file())?;
-    let repository_data = serde_json::from_slice(&data_file_contents)?;
-
-    Ok(Some(repository_data))
-}
-
 pub fn write_tree(paths: &RepositoryPaths, repo: &Tree) -> Result<()> {
     assert!(repo.valid(), "Repository data is not valid: {:#?}", repo);
 
