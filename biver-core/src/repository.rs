@@ -10,10 +10,12 @@ use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 
-mod io;
+mod common;
 mod paths;
+mod preview;
 mod session;
 
+use crate::repository::common::try_store_preview;
 pub use session::*;
 
 #[derive(Debug, IsVariant)]
@@ -27,7 +29,7 @@ pub fn try_start_session(
     versioned_file_path: PathBuf,
 ) -> Result<TryStartSessionResult> {
     let paths = RepositoryPaths::new(versioned_file_path);
-    let tree = io::read_tree(&paths)?;
+    let tree = common::read_tree(&paths)?;
 
     match tree {
         Some(tree) => Ok(TryStartSessionResult::Ok(Session::try_new(
@@ -49,7 +51,7 @@ pub fn initialize(
     description: String,
 ) -> Result<InitializeResult> {
     let paths = RepositoryPaths::new(versioned_file_path);
-    let tree = io::read_tree(&paths)?;
+    let tree = common::read_tree(&paths)?;
 
     if let Some(tree) = tree {
         return Ok(InitializeResult {
@@ -73,8 +75,7 @@ pub fn initialize(
     let content_blob_file_path = paths.content_blob_path(new_version_id);
     let preview_blob_file_path = paths.preview_path(new_version_id);
 
-    let has_preview =
-        io::try_store_version_preview(&config, &preview_blob_file_path, &paths.versioned_file())?;
+    let has_preview = try_store_preview(&config, &paths.versioned_file(), &preview_blob_file_path)?;
 
     let new_version = Version {
         id: new_version_id,
@@ -94,8 +95,8 @@ pub fn initialize(
         versions: vec![new_version],
     };
 
-    io::store_version_content_full(&paths.versioned_file(), &content_blob_file_path)?;
-    io::write_tree(&paths, &tree)?;
+    fs::copy(&paths.versioned_file(), &content_blob_file_path)?;
+    common::write_tree(&paths, &tree)?;
 
     Ok(InitializeResult {
         session: Session::try_new(config, paths, tree)?,

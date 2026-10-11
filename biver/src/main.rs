@@ -1,18 +1,18 @@
 use crate::command_line_arguments::{BranchCommand, Command, CommandLineArguments};
 use crate::error::{Error, Result, Severity, error, warning};
 use crate::extensions::OkExt;
-use crate::target_expression::BranchOrVersion;
+use crate::target_expression::{BranchOrVersion, VersionOrUncommitted};
 use biver_core::data::BranchName;
 use biver_core::repository;
 use biver_core::repository::{
     AmendResult, CheckOutBranchResult, CheckOutVersionResult, CommitResult, CreateBranchResult,
-    DeleteBranchResult, RenameBranchResult, RestoreVersionResult, SoftResetResult,
+    DeleteBranchResult, RenameBranchResult, RestoreVersionResult, Session, SoftResetResult,
     TryStartSessionResult, UpdateDescriptionResult,
 };
 use clap::Parser;
 use colored::Colorize;
 use std::io;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Read, Seek};
 use std::process::ExitCode;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -81,13 +81,7 @@ fn run_command(command: Command) -> Result<()> {
         } => {
             let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
-            let Some(version_id) = target_expression::resolve_version(&session, &target) else {
-                return error("Invalid target");
-            };
-
-            let Some(preview) = session.preview(version_id)? else {
-                return error("No preview available");
-            };
+            let (_, preview) = preview(&session, Some(&target))?;
 
             viewer::show_preview(preview)?;
 
@@ -101,36 +95,8 @@ fn run_command(command: Command) -> Result<()> {
         } => {
             let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
-            let Some(version1) = target_expression::resolve_version(&session, &target1)
-                .and_then(|id| session.tree().version(id))
-            else {
-                return error(format!("Invalid target {}", &target1));
-            };
-
-            let version2 = match &target2 {
-                None => session.tree().head_version(), // TODO by default compare with uncommitted
-                Some(target2) => {
-                    let Some(version) = target_expression::resolve_version(&session, target2)
-                        .and_then(|id| session.tree().version(id))
-                    else {
-                        return error(format!("Invalid target {}", &target2));
-                    };
-                    version
-                }
-            };
-
-            let Some(preview1) = session.preview(version1.id)? else {
-                return error(format!("No preview available for {}", version1.id.bs58()));
-            };
-
-            let Some(preview2) = session.preview(version2.id)? else {
-                return error(format!("No preview available for {}", version2.id.bs58()));
-            };
-
-            let formatted_versions =
-                formatting::format_versions(session.tree(), &vec![version1, version2]);
-            let description1 = &formatted_versions[0];
-            let description2 = &formatted_versions[1];
+            let (description1, preview1) = preview(&session, Some(&target1))?;
+            let (description2, preview2) = preview(&session, target2.as_deref())?;
 
             viewer::show_comparison(preview1, description1, preview2, description2)?;
 
@@ -509,4 +475,34 @@ fn fail_with_untested() -> Result<()> {
         message: "Operation is not tested yet".to_string(),
         severity: Severity::Error,
     })
+}
+
+fn preview<'a>(
+    session: &'a Session,
+    target_expr: Option<&'a str>,
+) -> Result<(&'a str, impl Read + Seek)> {
+    let Some(target_expr) = target_expr else {
+        return Ok((
+            target_expression::UNCOMMITTED_CHANGES_EXPRESSION,
+            session.preview_versioned_file()?,
+        ));
+    };
+
+    let Some(target) = target_expression::resolve_version_or_uncommitted(session, target_expr)
+    else {
+        return error(format!("Invalid target {}", target_expr));
+    };
+
+    let preview = match target {
+        VersionOrUncommitted::Version(version_id) => {
+            let Some(preview) = session.preview(version_id)? else {
+                return error(format!("No preview available for {}", target_expr));
+            };
+
+            preview
+        }
+        VersionOrUncommitted::Uncommitted => session.preview_versioned_file()?,
+    };
+
+    Ok((target_expr, preview))
 }

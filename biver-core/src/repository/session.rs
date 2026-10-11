@@ -1,16 +1,17 @@
 use crate::data::{BranchName, ContentBlobKind, Head, Tree, Version, VersionId};
 use crate::error::Result;
-use crate::repository::io;
+use crate::repository::common::{try_store_preview, write_tree};
 use crate::repository::paths::RepositoryPaths;
-use crate::utilities::{hash, nickname};
+use crate::repository::preview::Preview;
+use crate::utilities::{external_diff_command, hash, nickname};
 use crate::{Configuration, Error, temp_file};
 use chrono::Utc;
 use derive_more::IsVariant;
 use itertools::Itertools;
-use std::fs;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{Read, Seek};
 use std::path::Path;
+use std::{fs, mem};
 
 macro_rules! use_break {
     ($self:ident, $body:block) => {{
@@ -115,19 +116,19 @@ impl Session {
 
             let content_blob_file_path = self.paths.content_blob_path(new_version_id);
 
-            let parent_version_file_path = temp_file::new_path()?;
-            self.extract_version_content(head.id, &parent_version_file_path)?;
-            self.store_version_content_patch(
-                &parent_version_file_path,
+            let temp_parent_version_file_path = temp_file::new_path();
+            self.extract_version_content(head.id, &temp_parent_version_file_path)?;
+            self.store_patch(
+                &temp_parent_version_file_path,
                 self.paths.versioned_file(),
                 &content_blob_file_path,
             )?;
-            fs::remove_file(&parent_version_file_path)?;
+            fs::remove_file(temp_parent_version_file_path)?;
 
-            let has_preview = io::try_store_version_preview(
+            let has_preview = try_store_preview(
                 &self.config,
-                &self.paths.preview_path(new_version_id),
                 &self.paths.versioned_file(),
+                &self.paths.preview_path(new_version_id),
             )?;
 
             let new_version = Version {
@@ -151,7 +152,7 @@ impl Session {
                 .expect("Head must point at a valid branch");
             *head_branch_tip = new_version_id;
 
-            io::write_tree(&self.paths, &self.tree)?;
+            write_tree(&self.paths, &self.tree)?;
 
             Ok(CommitResult::Ok)
         })
@@ -202,29 +203,26 @@ impl Session {
 
             let content_blob_file_path = self.paths.content_blob_path(new_version_id);
             let content_blob_kind = if erased_version.is_root() {
-                io::store_version_content_full(
-                    self.paths.versioned_file(),
-                    &content_blob_file_path,
-                )?;
+                fs::copy(self.paths.versioned_file(), &content_blob_file_path)?;
 
                 ContentBlobKind::Full
             } else {
-                let parent_version_file_path = temp_file::new_path()?;
-                self.extract_version_content(head.id, &parent_version_file_path)?;
-                self.store_version_content_patch(
-                    &parent_version_file_path,
+                let temp_parent_version_file = temp_file::new_path();
+                self.extract_version_content(head.id, &temp_parent_version_file)?;
+                self.store_patch(
+                    &temp_parent_version_file,
                     self.paths.versioned_file(),
                     &content_blob_file_path,
                 )?;
-                fs::remove_file(&parent_version_file_path)?;
+                fs::remove_file(temp_parent_version_file)?;
 
                 ContentBlobKind::Patch
             };
 
-            let has_preview = io::try_store_version_preview(
+            let has_preview = try_store_preview(
                 &self.config,
-                &self.paths.preview_path(new_version_id),
                 &self.paths.versioned_file(),
+                &self.paths.preview_path(new_version_id),
             )?;
 
             let new_version = Version {
@@ -485,7 +483,7 @@ impl Session {
         Ok(Some(file))
     }
 
-    pub fn preview(&self, version_id: VersionId) -> Result<Option<impl Read + Seek>> {
+    pub fn preview(&self, version_id: VersionId) -> Result<Option<Preview>> {
         let Some(version) = self.tree.version(version_id) else {
             return Ok(None);
         };
@@ -496,13 +494,19 @@ impl Session {
 
         let path = self.paths.preview_path(version_id);
 
-        let file = File::open(path)?;
+        Ok(Some(Preview::new(path)?))
+    }
 
-        Ok(Some(file))
+    pub fn preview_versioned_file(&self) -> Result<Preview> {
+        let temp = temp_file::new_path();
+
+        try_store_preview(&self.config, self.paths.versioned_file(), &temp)?;
+
+        Ok(Preview::new(temp)?.with_cleanup())
     }
 
     fn write_tree(&self) -> Result<()> {
-        io::write_tree(&self.paths, &self.tree)?;
+        write_tree(&self.paths, &self.tree)?;
         Ok(())
     }
 
@@ -511,18 +515,57 @@ impl Session {
         Ok(())
     }
 
-    fn extract_version_content(&self, version_id: VersionId, path: &Path) -> Result<()> {
-        io::extract_version_content(&self.config, &self.paths, &self.tree, version_id, path)?;
+    fn extract_version_content(&self, version_id: VersionId, destination: &Path) -> Result<()> {
+        let mut chain = self
+            .tree
+            .version_and_ancestors(version_id)
+            .take_while_inclusive(|v| v.content_blob_kind.is_patch())
+            .collect_vec();
+
+        assert!(!chain.is_empty());
+
+        chain.reverse();
+
+        let version = chain[0];
+        assert!(version.content_blob_kind.is_full());
+        let full_blob = self.paths.content_blob_path(version.id);
+
+        let a = temp_file::new_path();
+        let b = temp_file::new_path();
+
+        let mut actual = &a;
+        let mut stale = &b;
+
+        if chain.len() == 1 {
+            fs::copy(&full_blob, destination)?;
+            return Ok(());
+        } else {
+            fs::copy(&full_blob, actual)?;
+        }
+
+        for version in chain.iter().skip(1) {
+            assert!(version.content_blob_kind.is_patch());
+
+            let patch = self.paths.content_blob_path(version.id);
+
+            if fs::exists(&stale)? {
+                fs::remove_file(&stale)?;
+            }
+
+            external_diff_command::apply_patch(&self.config, &actual, &patch, &stale)?;
+            mem::swap(&mut actual, &mut stale);
+        }
+
+        fs::copy(actual, destination)?;
+
+        fs::remove_file(&a)?;
+        fs::remove_file(&b)?;
+
         Ok(())
     }
 
-    fn store_version_content_patch(
-        &self,
-        old_path: &Path,
-        new_path: &Path,
-        patch: &Path,
-    ) -> Result<()> {
-        io::store_version_content_patch(&self.config, old_path, new_path, patch)?;
+    fn store_patch(&self, old_path: &Path, new_path: &Path, patch: &Path) -> Result<()> {
+        external_diff_command::create_patch(&self.config, old_path, new_path, patch)?;
         Ok(())
     }
 

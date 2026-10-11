@@ -7,5 +7,5 @@ mod test_config;
 mod helpers;
 
 mod commit_tests;
-mod repository_tests;
 mod lock_tests;
+mod repository_tests;

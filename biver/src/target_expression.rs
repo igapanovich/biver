@@ -3,8 +3,9 @@ use biver_core::repository::Session;
 use itertools::Itertools;
 use std::str::FromStr;
 
-pub enum _BranchOrVersionOrUncommitted {
-    Branch(BranchName),
+pub const UNCOMMITTED_CHANGES_EXPRESSION: &str = "*";
+
+pub enum VersionOrUncommitted {
     Version(VersionId),
     Uncommitted,
 }
@@ -14,20 +15,14 @@ pub enum BranchOrVersion {
     Version(VersionId),
 }
 
-pub fn _resolve_branch_or_version_or_uncommitted(
+pub fn resolve_version_or_uncommitted(
     session: &Session,
     target_expr: &str,
-) -> Option<_BranchOrVersionOrUncommitted> {
-    if target_expr == "*" {
-        Some(_BranchOrVersionOrUncommitted::Uncommitted)
+) -> Option<VersionOrUncommitted> {
+    if target_expr == UNCOMMITTED_CHANGES_EXPRESSION {
+        Some(VersionOrUncommitted::Uncommitted)
     } else {
-        match resolve_branch_or_version(session, target_expr) {
-            Some(BranchOrVersion::Branch(branch_name)) => {
-                Some(_BranchOrVersionOrUncommitted::Branch(branch_name))
-            }
-            Some(BranchOrVersion::Version(v)) => Some(_BranchOrVersionOrUncommitted::Version(v)),
-            None => None,
-        }
+        resolve_version(session, target_expr).map(VersionOrUncommitted::Version)
     }
 }
 

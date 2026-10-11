@@ -1,4 +1,4 @@
-use biver_core::data::{Tree, Version};
+use biver_core::data::Tree;
 
 const MAX_VERSIONS_TO_PRINT: usize = 20;
 
@@ -30,11 +30,6 @@ pub fn print_repository_data(repo_data: &Tree, has_uncommitted_changes: bool, al
     if let Some(uncommitted_changes) = &prepared.uncommitted_changes {
         println!("{}", uncommitted_changes);
     }
-}
-
-pub fn format_versions(repo_data: &Tree, versions: &[&Version]) -> Vec<String> {
-    let prepared = prepared::prepare(repo_data, versions, false, None);
-    prepared.versions.iter().map(|v| v.to_string()).collect()
 }
 
 pub fn print_branch_list(tree: &Tree) {

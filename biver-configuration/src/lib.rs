@@ -24,7 +24,7 @@ pub fn read() -> Result<Configuration, Error> {
     fs::create_dir_all(&config_dir)?;
     let config_file = config_dir.join(CONFIG_FILE_NAME);
 
-    if !config_file.exists() {
+    if !fs::exists(&config_file)? {
         fs::write(&config_file, DEFAULT_CONFIG_STR)?;
     }
 

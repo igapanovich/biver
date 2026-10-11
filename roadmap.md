@@ -6,7 +6,6 @@
 - Copy global config into repository on init and use it
 - Tests
 - Logs
-- Allow comparing with current file state (uncommitted)
 - Licenses
 
 # Backlog

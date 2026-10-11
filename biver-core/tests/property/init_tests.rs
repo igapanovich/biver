@@ -12,7 +12,7 @@ proptest! {
 
         fs::write(&env.versioned_file_path(), &init_bytes)?;
 
-        let init_ok = repository::initialize(env.config().clone(), env.versioned_file_path().to_path_buf(), branch_name, description).unwrap();
+        let init_ok = repository::initialize(env.config().clone(), env.versioned_file_path().to_path_buf(), branch_name, description)?;
 
         let session = init_ok.session;
         let tree = session.tree();
