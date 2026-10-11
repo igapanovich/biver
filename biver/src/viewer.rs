@@ -5,12 +5,10 @@ use egui::{
     ViewportCommand, pos2,
 };
 use image::ImageFormat;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
+use std::io::{BufReader, Read, Seek};
 
-pub fn show_preview(image_path: &Path) -> Result<()> {
-    let image = egui_image_from_file(image_path)?;
+pub fn show_preview(image_path: impl Read + Seek) -> Result<()> {
+    let image = egui_image(image_path)?;
 
     eframe::run_native(
         "",
@@ -21,14 +19,14 @@ pub fn show_preview(image_path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn show_comparison(
-    image_path1: &Path,
+pub fn show_comparison<R: Read + Seek>(
+    image1: R,
     description1: &str,
-    image_path2: &Path,
+    image2: R,
     description2: &str,
 ) -> Result<()> {
-    let image1 = egui_image_from_file(&image_path1)?;
-    let image2 = egui_image_from_file(&image_path2)?;
+    let image1 = egui_image(image1)?;
+    let image2 = egui_image(image2)?;
 
     eframe::run_native(
         &description1,
@@ -47,9 +45,8 @@ pub fn show_comparison(
     Ok(())
 }
 
-fn egui_image_from_file(path: &Path) -> Result<ColorImage> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
+fn egui_image(reader: impl Read + Seek) -> Result<ColorImage> {
+    let reader = BufReader::new(reader);
     let image = image::load(reader, ImageFormat::Jpeg)?;
     let size = [image.width() as usize, image.height() as usize];
     let buffer = image.to_rgba8();

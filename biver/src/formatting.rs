@@ -37,9 +37,9 @@ pub fn format_versions(repo_data: &Tree, versions: &[&Version]) -> Vec<String> {
     prepared.versions.iter().map(|v| v.to_string()).collect()
 }
 
-pub fn print_branch_list(repo_data: &Tree) {
-    for branch in repo_data.branches.keys() {
-        println!("{}", branch)
+pub fn print_branch_list(tree: &Tree) {
+    for branch in tree.branch_names() {
+        println!("{}", branch.as_str())
     }
 }
 
@@ -110,7 +110,7 @@ mod colorization {
 }
 
 mod prepared {
-    use biver_core::data::{Tree, Version, VersionId};
+    use biver_core::data::{BranchName, Tree, Version, VersionId};
     use chrono_humanize::HumanTime;
     use itertools::Itertools;
     use std::collections::{HashMap, HashSet};
@@ -212,41 +212,41 @@ mod prepared {
     }
 
     pub fn prepare(
-        repo_data: &Tree,
+        tree: &Tree,
         versions_to_prepare: &[&Version],
         has_uncommitted_changes: bool,
         limit_from_end: Option<usize>,
     ) -> Prepared<String> {
         let mut prepared_versions = Vec::new();
 
-        let head_version_ids: Vec<VersionId> =
-            repo_data.head_and_ancestors().map(|v| v.id).collect();
+        let head_version_ids: Vec<VersionId> = tree.head_and_ancestors().map(|v| v.id).collect();
 
-        let branches_forking_at_version_id: HashMap<VersionId, Vec<String>> = repo_data
-            .branches
+        let branches_forking_at_version_id: HashMap<VersionId, Vec<&BranchName>> = tree
+            .branch_tip_ids()
             .iter()
-            .map(|(branch, branch_leaf_id)| {
-                let join_version_id = repo_data
-                    .version_and_ancestors(*branch_leaf_id)
+            .map(|(branch, branch_tip_id)| {
+                let join_version_id = tree
+                    .version_and_ancestors(*branch_tip_id)
                     .map(|v| v.id)
                     .find(|id| head_version_ids.contains(id))
                     .unwrap();
 
-                (join_version_id, branch.clone())
+                (join_version_id, branch)
             })
             .fold(HashMap::new(), |mut acc, (version_id, branch)| {
                 acc.entry(version_id).or_insert_with(Vec::new).push(branch);
                 acc
             });
 
-        let branches_by_version: HashMap<VersionId, Vec<&str>> =
-            repo_data
-                .branches
-                .iter()
-                .fold(HashMap::new(), |mut acc, (branch, version_id)| {
-                    acc.entry(*version_id).or_insert_with(Vec::new).push(branch);
-                    acc
-                });
+        let branches_by_version: HashMap<VersionId, Vec<&BranchName>> = tree
+            .branch_tip_ids()
+            .iter()
+            .fold(HashMap::new(), |mut acc, (branch, branch_tip_id)| {
+                acc.entry(*branch_tip_id)
+                    .or_insert_with(Vec::new)
+                    .push(branch);
+                acc
+            });
 
         let limit_from_end = limit_from_end.unwrap_or(versions_to_prepare.len());
         let mut version_count = 0;
@@ -255,18 +255,18 @@ mod prepared {
         let mut max_nickname_length = 0;
         let mut max_creation_time_humanized_length = 0;
 
-        let head_branch = repo_data.head.branch();
-        let head_version_id = repo_data.head_version().id;
+        let head_branch = tree.head().branch();
+        let head_version_id = tree.head_version().id;
 
         for version in versions_to_prepare.iter() {
             version_count += 1;
 
             let forking_branches = branches_forking_at_version_id.get(&version.id);
-            let mut forking_branches = forking_branches.unwrap_or(&Vec::new()).clone();
+            let mut forking_branches = forking_branches.cloned().unwrap_or(Vec::new());
 
             if version_count > limit_from_end {
-                for b in forking_branches.iter() {
-                    off_screen_branches.insert(b.clone());
+                for b in forking_branches {
+                    off_screen_branches.insert(b);
                 }
                 continue;
             }
@@ -277,11 +277,14 @@ mod prepared {
             let branches_on_version = branches_by_version.get(&version.id);
 
             if let Some(branches_on_version) = branches_on_version {
-                forking_branches.retain(|b| !branches_on_version.contains(&b.as_str()));
+                forking_branches.retain(|b| !branches_on_version.contains(&b));
             }
 
             let forking_branches = if forking_branches.len() > 0 {
-                Some(format!("->[{}]", forking_branches.join(", ")))
+                Some(format!(
+                    "->[{}]",
+                    forking_branches.iter().map(|b| b.as_str()).join(", ")
+                ))
             } else {
                 None
             };
@@ -290,7 +293,7 @@ mod prepared {
 
             let head_badge = if head_is_on_version {
                 if let Some(branch) = head_branch {
-                    Some(format!("[HEAD = {}]", branch))
+                    Some(format!("[HEAD = {}]", branch.as_str()))
                 } else {
                     Some("[HEAD]".to_string())
                 }
@@ -315,7 +318,10 @@ mod prepared {
                     if branches_on_version.len() == 0 {
                         None
                     } else {
-                        Some(format!("[{}]", branches_on_version.join(", ")))
+                        Some(format!(
+                            "[{}]",
+                            branches_on_version.iter().map(|b| b.as_str()).join(", ")
+                        ))
                     }
                 }
             };
@@ -373,7 +379,7 @@ mod prepared {
             } else {
                 Some(format!(
                     "->[{}]",
-                    off_screen_branches.into_iter().collect_vec().join(", ")
+                    off_screen_branches.iter().map(|b| b.as_str()).join(", ")
                 ))
             };
 

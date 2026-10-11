@@ -68,7 +68,7 @@ impl TestEnv {
                 .unwrap();
         match result {
             TryStartSessionResult::Ok(session) => session,
-            TryStartSessionResult::Uninitialized => panic!("Repository was not initialized"),
+            TryStartSessionResult::NotInitialized => panic!("Repository was not initialized"),
         }
     }
 

@@ -19,7 +19,7 @@ pub use session::*;
 #[derive(Debug, IsVariant)]
 pub enum TryStartSessionResult {
     Ok(Session),
-    Uninitialized,
+    NotInitialized,
 }
 
 pub fn try_start_session(
@@ -33,7 +33,7 @@ pub fn try_start_session(
         Some(tree) => Ok(TryStartSessionResult::Ok(Session::try_new(
             config, paths, tree,
         )?)),
-        None => Ok(TryStartSessionResult::Uninitialized),
+        None => Ok(TryStartSessionResult::NotInitialized),
     }
 }
 
@@ -46,7 +46,7 @@ pub fn initialize(
     config: Configuration,
     versioned_file_path: PathBuf,
     branch: Option<BranchName>,
-    description: Option<String>,
+    description: String,
 ) -> Result<InitializeResult> {
     let paths = RepositoryPaths::new(versioned_file_path);
     let tree = io::read_tree(&paths)?;
@@ -82,7 +82,7 @@ pub fn initialize(
         nickname: nickname::new_nickname(versioned_file_xxh3_128),
         versioned_file_length,
         versioned_file_xxh3_128,
-        description: description.unwrap_or_default().to_string(),
+        description,
         parent: None,
         content_blob_kind: ContentBlobKind::Full,
         has_preview,

@@ -43,7 +43,7 @@ fn commit_succeeds(
         repository::try_start_session(env.config.clone(), env.versioned_file_path.clone())?
             .unwrap();
 
-    let commit_result = session.commit(None)?;
+    let commit_result = session.commit("".to_string())?;
 
     if initial_content.eq(committed_content) {
         assert!(commit_result.is_no_uncommitted_changes())
@@ -78,7 +78,7 @@ fn commit_from_empty_to_nonempty_succeeds(
         repository::try_start_session(env.config.clone(), env.versioned_file_path.clone())?
             .unwrap();
 
-    let commit_result = session.commit(None)?;
+    let commit_result = session.commit("".to_string())?;
 
     assert!(commit_result.is_ok());
 
@@ -109,7 +109,7 @@ fn commit_from_nonempty_to_empty_succeeds(
         repository::try_start_session(env.config.clone(), env.versioned_file_path.clone())?
             .unwrap();
 
-    let commit_result = session.commit(None)?;
+    let commit_result = session.commit("".to_string())?;
 
     assert!(commit_result.is_ok());
 

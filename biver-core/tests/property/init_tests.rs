@@ -7,12 +7,12 @@ use std::io::Read;
 
 proptest! {
     #[test]
-    fn init_properties(init_bytes in arb::bytes()) {
+    fn init_properties(init_bytes in arb::bytes(), branch_name in arb::branch_name_option(), description in any::<String>()) {
         let env = TestEnv::uninitialized();
 
         fs::write(&env.versioned_file_path(), &init_bytes)?;
 
-        let init_ok = repository::initialize(env.config().clone(), env.versioned_file_path().to_path_buf(), None, None).unwrap();
+        let init_ok = repository::initialize(env.config().clone(), env.versioned_file_path().to_path_buf(), branch_name, description).unwrap();
 
         let session = init_ok.session;
         let tree = session.tree();

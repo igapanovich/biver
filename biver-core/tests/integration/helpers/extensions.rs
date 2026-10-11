@@ -8,7 +8,7 @@ impl UnwrapTryStartSessionExt for TryStartSessionResult {
     fn unwrap(self) -> Session {
         match self {
             TryStartSessionResult::Ok(session) => session,
-            TryStartSessionResult::Uninitialized => panic!("not initialized"),
+            TryStartSessionResult::NotInitialized => panic!("not initialized"),
         }
     }
 }

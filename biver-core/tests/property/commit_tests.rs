@@ -9,12 +9,12 @@ use proptest::prelude::*;
 
 proptest! {
     #[test]
-    fn commit_ok_properties(env in arb::env_with_opts(&[HeadOnBranch, UncommittedChanges])) {
+    fn commit_ok_properties(env in arb::env_with_opts(&[HeadOnBranch, UncommittedChanges]), description in any::<String>()) {
         let mut session = env.start_session();
 
         let before = env.snapshot(&session);
 
-        let result = session.commit(None)?;
+        let result = session.commit(description)?;
 
         let after = env.snapshot(&session);
 
@@ -38,12 +38,12 @@ proptest! {
     }
 
     #[test]
-    fn commit_head_must_be_on_branch_properties(env in arb::env_with_opts(&[HeadOnVersion, UncommittedChanges])) {
+    fn commit_head_must_be_on_branch_properties(env in arb::env_with_opts(&[HeadOnVersion, UncommittedChanges]), description in any::<String>()) {
         let mut session = env.start_session();
 
         let before = env.snapshot(&session);
 
-        let result = session.commit(None)?;
+        let result = session.commit(description)?;
 
         let after = env.snapshot(&session);
 
@@ -53,12 +53,12 @@ proptest! {
     }
 
     #[test]
-    fn commit_no_uncommitted_changes_properties(env in arb::env_with_opts(&[HeadOnBranch, NoUncommittedChanges])) {
+    fn commit_no_uncommitted_changes_properties(env in arb::env_with_opts(&[HeadOnBranch, NoUncommittedChanges]), description in any::<String>()) {
         let mut session = env.start_session();
 
         let before = env.snapshot(&session);
 
-        let result = session.commit(None)?;
+        let result = session.commit(description)?;
 
         let after = env.snapshot(&session);
 

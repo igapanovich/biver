@@ -172,7 +172,7 @@ fn branch_blueprint() -> impl Strategy<Value = BranchBlueprint> {
 }
 
 fn version_blueprint() -> impl Strategy<Value = VersionBlueprint> {
-    (vec(file_operation(), 1..=4), any::<Option<String>>()).prop_map(|(changes, description)| {
+    (vec(file_operation(), 1..=4), any::<String>()).prop_map(|(changes, description)| {
         VersionBlueprint {
             changes,
             description,

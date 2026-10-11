@@ -17,7 +17,21 @@ impl Debug for BranchName {
 }
 
 impl BranchName {
-    pub fn new(branch_name: String) -> Result<Self, ValidationError> {
+    pub fn new(branch_name: String) -> Result<Self, (String, ValidationError)> {
+        match Self::validate(&branch_name) {
+            Ok(()) => Ok(BranchName(branch_name)),
+            Err(e) => Err((branch_name, e)),
+        }
+    }
+
+    pub fn new_cloned(branch_name: &str) -> Result<Self, ValidationError> {
+        match Self::validate(&branch_name) {
+            Ok(()) => Ok(BranchName(branch_name.to_string())),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn validate(branch_name: &str) -> Result<(), ValidationError> {
         if branch_name.is_empty() {
             return Err(ValidationError::MustNotBeEmpty);
         }
@@ -30,7 +44,7 @@ impl BranchName {
             return Err(ValidationError::InvalidCharacters);
         }
 
-        Ok(BranchName(branch_name))
+        Ok(())
     }
 
     pub fn as_str(&self) -> &str {

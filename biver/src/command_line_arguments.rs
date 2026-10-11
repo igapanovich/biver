@@ -82,8 +82,8 @@ pub enum Command {
         description: Option<String>,
     },
 
-    /// Change description of the specified version
-    Reword {
+    /// Update description of the specified version
+    UpdateDescription {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 
@@ -106,13 +106,9 @@ pub enum Command {
     },
 
     /// Reset the current branch back to the specified version
-    Reset {
+    SoftReset {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
-
-        /// Also reset the versioned file
-        #[arg(long = "hard")]
-        hard: bool,
 
         /// Do not ask for confirmation
         #[arg(short = 'y', long = "yes")]
@@ -144,51 +140,30 @@ pub enum Command {
         target: String,
     },
 
-    /// Create commands
+    /// Branch commands
     #[command(subcommand)]
-    Create(CreateCommand),
-
-    /// List commands
-    #[command(subcommand)]
-    List(ListCommand),
-
-    /// Rename commands
-    #[command(subcommand)]
-    Rename(RenameCommand),
-
-    /// Delete commands
-    #[command(subcommand)]
-    Delete(DeleteCommand),
+    Branch(BranchCommand),
 }
 
 #[derive(Subcommand)]
-pub enum CreateCommand {
-    Branch {
+pub enum BranchCommand {
+    /// Create branch
+    Create {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
-
-        /// Check out the new branch after creation
-        #[arg(short = 'c', long = "checkout")]
-        checkout: bool,
 
         /// The name of the new branch
         name: String,
     },
-}
 
-#[derive(Subcommand)]
-pub enum ListCommand {
     /// List branches
-    Branches {
+    List {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
     },
-}
 
-#[derive(Subcommand)]
-pub enum RenameCommand {
     /// Rename a branch
-    Branch {
+    Rename {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 
@@ -198,12 +173,9 @@ pub enum RenameCommand {
         #[arg(value_name = "NEW_NAME")]
         new_name: String,
     },
-}
 
-#[derive(Subcommand)]
-pub enum DeleteCommand {
     /// Delete a branch
-    Branch {
+    Delete {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 

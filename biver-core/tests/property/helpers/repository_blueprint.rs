@@ -41,7 +41,7 @@ pub struct BranchBlueprint {
 #[derive(Debug)]
 pub struct VersionBlueprint {
     pub changes: Vec<FileOperation>,
-    pub description: Option<String>,
+    pub description: String,
 }
 
 impl InitialBranchBlueprint {

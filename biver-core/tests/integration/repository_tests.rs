@@ -23,7 +23,7 @@ pub fn initialize_succeeds(#[case] file_content: &[u8]) -> Result<(), Box<dyn Er
         env.config.clone(),
         env.versioned_file_path.clone(),
         None,
-        None,
+        "".to_string(),
     )?;
 
     assert!(!init_ok.was_already_initialized);
@@ -52,7 +52,7 @@ pub fn initialize_does_not_modify_versioned_file(
         env.config.clone(),
         env.versioned_file_path.clone(),
         None,
-        None,
+        "".to_string(),
     )?;
 
     let file_content_after_init = fs::read(&env.versioned_file_path)?;

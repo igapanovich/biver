@@ -1,10 +1,14 @@
-use crate::command_line_arguments::{
-    Command, CommandLineArguments, CreateCommand, DeleteCommand, ListCommand, RenameCommand,
-};
+use crate::command_line_arguments::{BranchCommand, Command, CommandLineArguments};
 use crate::error::{Error, Result, Severity, error, warning};
-use biver_core::data::Tree;
-use biver_core::repository::session::{NewSession, Session};
-use biver_core::{RepositoryPaths, Session, operations as ops};
+use crate::extensions::OkExt;
+use crate::target_expression::BranchOrVersion;
+use biver_core::data::BranchName;
+use biver_core::repository;
+use biver_core::repository::{
+    AmendResult, CheckOutBranchResult, CheckOutVersionResult, CommitResult, CreateBranchResult,
+    DeleteBranchResult, RenameBranchResult, RestoreVersionResult, SoftResetResult,
+    TryStartSessionResult, UpdateDescriptionResult,
+};
 use clap::Parser;
 use colored::Colorize;
 use std::io;
@@ -16,7 +20,9 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 mod command_line_arguments;
 mod error;
+mod extensions;
 mod formatting;
+mod target_expression;
 mod viewer;
 
 fn main() -> ExitCode {
@@ -46,26 +52,21 @@ fn main() -> ExitCode {
 }
 
 fn run_command(command: Command) -> Result<()> {
+    let config = config()?;
+
     match command {
         Command::Status {
             versioned_file_path,
             all,
         } => {
-            let session = Session::new(versioned_file_path)?;
-            match session {
-                NewSession::Uninitialized(_) => println!("Not initialized"),
-            }
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let repo = ops::read_repository(&paths)?;
+            let session_result = repository::try_start_session(config, versioned_file_path)?;
 
-            match repo {
-                ops::read_repository::Outcome::NotInitialized => println!("Not initialized"),
-                ops::read_repository::Outcome::Initialized(repository_data) => {
-                    let has_uncommitted_changes =
-                        ops::has_uncommitted_changes(&paths, &repository_data)?;
+            match session_result {
+                TryStartSessionResult::NotInitialized => println!("Not initialized"),
+                TryStartSessionResult::Ok(session) => {
                     formatting::print_repository_data(
-                        &repository_data,
-                        has_uncommitted_changes,
+                        session.tree(),
+                        session.has_uncommitted_changes()?,
                         all,
                     );
                 }
@@ -78,21 +79,17 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             target,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let repo = ops::read_repository(&paths)?.initialized()?;
+            let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
-            let version = match ops::resolve_version(&repo, &target) {
-                ops::resolve_version::Outcome::InvalidTarget => {
-                    return error("Invalid target");
-                }
-                ops::resolve_version::Outcome::Ok(version) => version,
+            let Some(version_id) = target_expression::resolve_version(&session, &target) else {
+                return error("Invalid target");
             };
 
-            let Some(preview_file_path) = paths.preview_blob_path(version) else {
+            let Some(preview) = session.preview(version_id)? else {
                 return error("No preview available");
             };
 
-            viewer::show_preview(&preview_file_path)?;
+            viewer::show_preview(preview)?;
 
             Ok(())
         }
@@ -102,39 +99,40 @@ fn run_command(command: Command) -> Result<()> {
             target1,
             target2,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let repo = ops::read_repository(&paths)?.initialized()?;
+            let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
-            let version_and_preview = |target: Option<&str>| {
-                let version = match target {
-                    None => repo.head_version(),
-                    Some(target) => match ops::resolve_version(&repo, target) {
-                        ops::resolve_version::Outcome::InvalidTarget => {
-                            return error(format!("Invalid target {}", target));
-                        }
-                        ops::resolve_version::Outcome::Ok(version) => version,
-                    },
-                };
+            let Some(version1) = target_expression::resolve_version(&session, &target1)
+                .and_then(|id| session.tree().version(id))
+            else {
+                return error(format!("Invalid target {}", &target1));
+            };
 
-                match paths.preview_blob_path(version) {
-                    Some(preview) => Ok((version, preview)),
-                    None => error(format!("No preview available for {}", version.id.bs58())),
+            let version2 = match &target2 {
+                None => session.tree().head_version(), // TODO by default compare with uncommitted
+                Some(target2) => {
+                    let Some(version) = target_expression::resolve_version(&session, target2)
+                        .and_then(|id| session.tree().version(id))
+                    else {
+                        return error(format!("Invalid target {}", &target2));
+                    };
+                    version
                 }
             };
 
-            let (version1, preview_file_path1) = version_and_preview(Some(&target1))?;
-            let (version2, preview_file_path2) = version_and_preview(target2.as_deref())?;
+            let Some(preview1) = session.preview(version1.id)? else {
+                return error(format!("No preview available for {}", version1.id.bs58()));
+            };
 
-            let formatted_versions = formatting::format_versions(&repo, &vec![version1, version2]);
+            let Some(preview2) = session.preview(version2.id)? else {
+                return error(format!("No preview available for {}", version2.id.bs58()));
+            };
+
+            let formatted_versions =
+                formatting::format_versions(session.tree(), &vec![version1, version2]);
             let description1 = &formatted_versions[0];
             let description2 = &formatted_versions[1];
 
-            viewer::show_comparison(
-                &preview_file_path1,
-                description1,
-                &preview_file_path2,
-                description2,
-            )?;
+            viewer::show_comparison(preview1, description1, preview2, description2)?;
 
             success()
         }
@@ -144,15 +142,27 @@ fn run_command(command: Command) -> Result<()> {
             initial_branch_name: branch_name,
             initial_version_description: description,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let config = config()?;
+            let branch_name = match branch_name {
+                None => None,
+                Some(branch_name) => {
+                    let Ok(branch_name) = BranchName::new(branch_name) else {
+                        return error("Invalid branch name");
+                    };
+                    Some(branch_name)
+                }
+            };
 
-            let result = ops::init(&config, &paths, branch_name, description.as_deref())?;
+            let init_ok = repository::initialize(
+                config,
+                versioned_file_path,
+                branch_name,
+                description.unwrap_or_default(),
+            )?;
 
-            match result {
-                ops::init::Outcome::Ok => success_ok(),
-                ops::init::Outcome::AlreadyInitialized => warning("Already initialized"),
-                ops::init::Outcome::InvalidBranchName => error("Invalid branch name"),
+            if init_ok.was_already_initialized {
+                warning("Already initialized")
+            } else {
+                success_ok()
             }
         }
 
@@ -160,16 +170,13 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             description,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let mut repo = ops::read_repository(&paths)?.initialized()?;
-            let config = config()?;
+            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
-            let result = ops::commit(&config, &paths, &mut repo, description.as_deref())?;
-
+            let result = session.commit(description.unwrap_or_default())?;
             match result {
-                ops::commit::Outcome::Ok => success_ok(),
-                ops::commit::Outcome::NothingToCommit => warning("Nothing to commit"),
-                ops::commit::Outcome::HeadMustBeOnBranch => error("Head must be on a branch"),
+                CommitResult::Ok => success_ok(),
+                CommitResult::NoUncommittedChanges => warning("No uncommitted changes"),
+                CommitResult::HeadMustBeOnBranch => error("Head must point at a branch"),
             }
         }
 
@@ -178,9 +185,9 @@ fn run_command(command: Command) -> Result<()> {
             confirmed,
             description,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let mut repo = ops::read_repository(&paths)?.initialized()?;
-            let config = config()?;
+            fail_with_untested()?;
+
+            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
             if !confirmed {
                 println!("Are you sure you want to overwrite the head version? (y/N)");
@@ -190,34 +197,34 @@ fn run_command(command: Command) -> Result<()> {
                 }
             }
 
-            let result = ops::amend(&config, &paths, &mut repo, description.as_deref())?;
+            let result = session.amend(description)?;
 
             match result {
-                ops::amend::Outcome::Ok => success_ok(),
-                ops::amend::Outcome::NoUncommittedChanges => warning("No uncommitted changes"),
-                ops::amend::Outcome::HeadMustBeBranch => error("Head must be on a branch"),
-                ops::amend::Outcome::CannotAmendParent => {
-                    error("Cannot amend head version because it has children")
+                AmendResult::Ok(_) => success_ok(),
+                AmendResult::NoUncommittedChanges => warning("No uncommitted changes"),
+                AmendResult::HeadMustBeBranch => error("Head must point at a branch"),
+                AmendResult::CannotAmendVersionBelongingToAnotherBranch => {
+                    error("Cannot amend head version because it also belongs to other branches")
                 }
-                ops::amend::Outcome::HeadEqualsParent => error(
-                    "Amend would result in head having identical content to its parent's. Use hard reset instead.",
-                ),
             }
         }
 
-        Command::Reword {
+        Command::UpdateDescription {
             versioned_file_path,
             target,
             description,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let mut repo = ops::read_repository(&paths)?.initialized()?;
+            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
-            let result = ops::reword(&paths, &mut repo, &target, &description)?;
+            let Some(target_id) = target_expression::resolve_version(&session, &target) else {
+                return error("Invalid target");
+            };
+
+            let result = session.update_description(target_id, description)?;
 
             match result {
-                ops::reword::Outcome::Ok => success_ok(),
-                ops::reword::Outcome::InvalidTarget => error("Invalid target"),
+                UpdateDescriptionResult::Ok => success_ok(),
+                UpdateDescriptionResult::VersionNotFound => error("Invalid target"),
             }
         }
 
@@ -225,11 +232,9 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             confirmed,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let repo = ops::read_repository(&paths)?.initialized()?;
-            let config = config()?;
+            let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
-            if !ops::has_uncommitted_changes(&paths, &repo)? {
+            if !session.has_uncommitted_changes()? {
                 return warning("No uncommitted changes");
             }
 
@@ -241,20 +246,19 @@ fn run_command(command: Command) -> Result<()> {
                 }
             }
 
-            ops::discard(&config, &paths, &repo)?;
+            session.discard()?;
 
             success_ok()
         }
 
-        Command::Reset {
+        Command::SoftReset {
             versioned_file_path,
-            hard,
             confirmed,
             target,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let mut repo = ops::read_repository(&paths)?.initialized()?;
-            let config = config()?;
+            fail_with_untested()?;
+
+            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
             if !confirmed {
                 println!("Are you sure you want to reset? (y/N)");
@@ -264,20 +268,18 @@ fn run_command(command: Command) -> Result<()> {
                 }
             }
 
-            let result = ops::reset(&paths, &mut repo, target.as_str())?;
+            let Some(target) = target_expression::resolve_as_bs58(&target) else {
+                return error("Invalid target");
+            };
+
+            let result = session.soft_reset(target)?;
 
             match result {
-                ops::reset::Outcome::Ok => {
-                    if hard {
-                        ops::discard(&config, &paths, &repo)?;
-                    }
-
-                    success_ok()
-                }
-                ops::reset::Outcome::HeadMustBeBranch => error("Head must be on a branch"),
-                ops::reset::Outcome::InvalidTarget => error("Invalid target"),
-                ops::reset::Outcome::CannotLeaveOrphans => error(
-                    "Reset would leave orphaned versions. Make sure none of the erased versions have children outside of the reset range.",
+                SoftResetResult::Ok(_) => success_ok(),
+                SoftResetResult::HeadMustBeBranch => error("Head must be on a branch"),
+                SoftResetResult::InvalidResetRange => error("Invalid reset range"),
+                SoftResetResult::ResetRangeOverlapsWithOtherBranches => error(
+                    "Cannot reset because some of the erased versions belong to other branches",
                 ),
             }
         }
@@ -286,18 +288,36 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             target,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let mut repo = ops::read_repository(&paths)?.initialized()?;
-            let config = config()?;
+            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
 
-            let result = ops::check_out(&config, &paths, &mut repo, &target)?;
+            let Some(target) = target_expression::resolve_branch_or_version(&session, &target)
+            else {
+                return error("Invalid target");
+            };
 
-            match result {
-                ops::check_out::Outcome::Ok => success_ok(),
-                ops::check_out::Outcome::HasUncommittedChanges => {
-                    warning("Can not checkout because there are uncommitted changes")
+            match target {
+                BranchOrVersion::Branch(branch) => {
+                    let result = session.check_out_branch(branch)?;
+
+                    match result {
+                        CheckOutBranchResult::Ok => success_ok(),
+                        CheckOutBranchResult::HasUncommittedChanges => {
+                            error("Can not checkout because there are uncommitted changes")
+                        }
+                        CheckOutBranchResult::BranchNotFound => error("Branch not found"),
+                    }
                 }
-                ops::check_out::Outcome::InvalidTarget => error("Invalid target"),
+                BranchOrVersion::Version(version) => {
+                    let result = session.check_out_version(version)?;
+
+                    match result {
+                        CheckOutVersionResult::Ok => success_ok(),
+                        CheckOutVersionResult::HasUncommittedChanges => {
+                            error("Can not checkout because there are uncommitted changes")
+                        }
+                        CheckOutVersionResult::VersionNotFound => error("Version not found"),
+                    }
+                }
             }
         }
 
@@ -306,80 +326,100 @@ fn run_command(command: Command) -> Result<()> {
             output,
             target,
         } => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let repo = ops::read_repository(&paths)?.initialized()?;
-            let config = config()?;
+            fail_with_untested()?;
 
-            let result = ops::restore(&config, &paths, &repo, &target, output.as_deref())?;
+            let output = output.unwrap_or_else(|| versioned_file_path.clone());
+
+            let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+
+            let Some(target) = target_expression::resolve_version(&session, &target) else {
+                return error("Invalid target");
+            };
+
+            let result = session.restore_version(target, &output)?;
 
             match result {
-                ops::restore::Outcome::Ok => success_ok(),
-                ops::restore::Outcome::BlockedByUncommittedChanges => error(
+                RestoreVersionResult::Ok => success_ok(),
+                RestoreVersionResult::WouldOverwriteUncommittedChanges => error(
                     "Cannot restore to the versioned file because there are uncommitted changes",
                 ),
-                ops::restore::Outcome::InvalidTarget => error("Invalid target"),
+                RestoreVersionResult::VersionNotFound => error("Invalid target"),
             }
         }
 
-        Command::Create(CreateCommand::Branch {
-            versioned_file_path,
-            checkout,
-            name,
-        }) => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let mut repo = ops::read_repository(&paths)?.initialized()?;
+        Command::Branch(branch_command) => match branch_command {
+            BranchCommand::Create {
+                versioned_file_path,
+                name,
+            } => {
+                let Ok(branch_name) = BranchName::new(name) else {
+                    return error("Invalid branch name");
+                };
 
-            let result = ops::branch::create(&paths, &mut repo, &name, checkout)?;
+                let mut session =
+                    repository::try_start_session(config, versioned_file_path)?.ok()?;
 
-            match result {
-                ops::branch::create::Outcome::Ok => success_ok(),
-                ops::branch::create::Outcome::BranchAlreadyExists => error("Branch already exists"),
-                ops::branch::create::Outcome::InvalidBranchName => error("Invalid branch name"),
+                let head_version_d = session.tree().head_version_id();
+
+                let result = session.create_branch(branch_name, head_version_d)?;
+
+                match result {
+                    CreateBranchResult::Ok => success_ok(),
+                    CreateBranchResult::AlreadyExists => error("Branch already exists"),
+                    CreateBranchResult::InvalidBranchTipId => {
+                        error("Invalid branch off version ID")
+                    }
+                }
             }
-        }
 
-        Command::List(ListCommand::Branches {
-            versioned_file_path,
-        }) => {
-            let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-            let repo = ops::read_repository(&paths)?.initialized()?;
+            BranchCommand::List {
+                versioned_file_path,
+            } => {
+                let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+                formatting::print_branch_list(session.tree());
+                success()
+            }
 
-            formatting::print_branch_list(&repo);
-
-            success()
-        }
-
-        Command::Rename(rename_command) => match rename_command {
-            RenameCommand::Branch {
+            BranchCommand::Rename {
                 versioned_file_path,
                 old_name,
                 new_name,
             } => {
-                let paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-                let mut repo = ops::read_repository(&paths)?.initialized()?;
+                let Ok(old_name) = BranchName::new(old_name) else {
+                    return error("Invalid old branch name");
+                };
 
-                let result = ops::branch::rename(&paths, &mut repo, &old_name, &new_name)?;
+                let Ok(new_name) = BranchName::new(new_name) else {
+                    return error("Invalid new branch name");
+                };
+
+                let mut session =
+                    repository::try_start_session(config, versioned_file_path)?.ok()?;
+
+                let result = session.rename_branch(old_name, new_name)?;
 
                 match result {
-                    ops::branch::rename::Outcome::Ok => success_ok(),
-                    ops::branch::rename::Outcome::AnotherBranchExistsWithSameName => {
-                        error("Another branch exists with the same name")
+                    RenameBranchResult::Ok => success_ok(),
+                    RenameBranchResult::NewNameAlreadyExists => {
+                        error("New name is already used by another branch")
                     }
-                    ops::branch::rename::Outcome::BranchDoesNotExist => {
-                        error("Branch does not exist")
+                    RenameBranchResult::OldBranchNotFound => {
+                        error("Old name does not belong to any branch")
                     }
                 }
             }
-        },
 
-        Command::Delete(delete_command) => match delete_command {
-            DeleteCommand::Branch {
+            BranchCommand::Delete {
                 versioned_file_path,
                 confirmed,
                 name,
             } => {
-                let repo_paths = RepositoryPaths::from_versioned_file_path(versioned_file_path);
-                let mut repo_data = ops::read_repository(&repo_paths)?.initialized()?;
+                let Ok(branch_name) = BranchName::new(name) else {
+                    return error("Invalid branch name");
+                };
+
+                let mut session =
+                    repository::try_start_session(config, versioned_file_path)?.ok()?;
 
                 if !confirmed {
                     println!("Are you sure you want to delete this branch? (y/N)");
@@ -389,15 +429,13 @@ fn run_command(command: Command) -> Result<()> {
                     }
                 }
 
-                let result = ops::branch::delete(&repo_paths, &mut repo_data, &name)?;
+                let result = session.delete_branch(branch_name)?;
 
                 match result {
-                    ops::branch::delete::Outcome::Ok => success_ok(),
-                    ops::branch::delete::Outcome::BranchDoesNotExist => {
-                        error("Branch does not exist")
-                    }
-                    ops::branch::delete::Outcome::CannotDeleteHead => {
-                        error("Cannot delete the version currently pointed at by HEAD")
+                    DeleteBranchResult::Ok(_) => success_ok(),
+                    DeleteBranchResult::BranchNotFound => error("Branch does not exist"),
+                    DeleteBranchResult::CannotDeleteHead => {
+                        error("Cannot delete the version currently pointed at by head")
                     }
                 }
             }
@@ -429,26 +467,8 @@ fn read_yes_no_input() -> Result<Option<bool>> {
     Ok(None)
 }
 
-trait RepositoryDataResultExtensions {
-    fn initialized(self) -> Result<Tree>;
-}
-
-impl RepositoryDataResultExtensions for ops::read_repository::Outcome {
-    fn initialized(self) -> Result<Tree> {
-        match self {
-            ops::read_repository::Outcome::NotInitialized => Err(Error {
-                message: "Not initialized".to_string(),
-                severity: Severity::Error,
-            }),
-            ops::read_repository::Outcome::Initialized(repository_data) => Ok(repository_data),
-        }
-    }
-}
-
-fn into_core_configuration(
-    value: biver_configuration::Configuration,
-) -> biver_core::configuration::Configuration {
-    biver_core::configuration::Configuration {
+fn into_core_configuration(value: biver_configuration::Configuration) -> biver_core::Configuration {
+    biver_core::Configuration {
         create_patch_command: value.create_patch_command,
         apply_patch_command: value.apply_patch_command,
         file_type_rules: value
@@ -459,16 +479,14 @@ fn into_core_configuration(
     }
 }
 
-fn into_core_file_type_rule(
-    value: biver_configuration::FileTypeRule,
-) -> biver_core::configuration::FileTypeRule {
-    biver_core::configuration::FileTypeRule {
+fn into_core_file_type_rule(value: biver_configuration::FileTypeRule) -> biver_core::FileTypeRule {
+    biver_core::FileTypeRule {
         extensions: value.extensions,
         preview_command: value.preview_command,
     }
 }
 
-fn config() -> Result<biver_core::configuration::Configuration> {
+fn config() -> Result<biver_core::Configuration> {
     Ok(into_core_configuration(biver_configuration::read()?))
 }
 
@@ -484,4 +502,11 @@ fn init_tracing() {
         );
 
     tracing_subscriber::registry().with(stdout_layer).init();
+}
+
+fn fail_with_untested() -> Result<()> {
+    Err(Error {
+        message: "Operation is not tested yet".to_string(),
+        severity: Severity::Error,
+    })
 }

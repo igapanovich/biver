@@ -59,7 +59,12 @@ pub fn create_initialized(
     fs::write(&versioned_file_path, versioned_file_content)?;
     let config = test_config::create();
 
-    repository::initialize(config.clone(), versioned_file_path.clone(), None, None)?;
+    repository::initialize(
+        config.clone(),
+        versioned_file_path.clone(),
+        None,
+        "".to_string(),
+    )?;
 
     Ok(TestEnvInitialized {
         root_path,

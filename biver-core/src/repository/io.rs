@@ -35,8 +35,11 @@ pub fn write_tree(paths: &RepositoryPaths, repo: &Tree) -> Result<()> {
     rotate_backup(&backup1, &backup2, Duration::from_mins(5))?;
     rotate_backup(paths.tree_file(), &backup1, Duration::from_secs(10))?;
 
-    let data_file_content = serde_json::to_string_pretty(repo)?;
-    fs::write(paths.tree_file(), data_file_content)?;
+    let tree_content = serde_json::to_string_pretty(repo)?;
+    let tree_tmp = paths.tree_file().with_extension(".tmp");
+    fs::rename(paths.tree_file(), &tree_tmp)?;
+    fs::write(paths.tree_file(), tree_content)?;
+    fs::remove_file(tree_tmp)?;
 
     Ok(())
 }

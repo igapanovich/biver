@@ -53,6 +53,10 @@ impl Tree {
         }
     }
 
+    pub fn head_branch_tip(&self) -> Option<&Version> {
+        self.head.branch().and_then(|b| self.branch_tip_version(b))
+    }
+
     pub fn root_version(&self) -> &Version {
         let root_version = self
             .versions
