@@ -47,7 +47,7 @@ pub struct Session {
     tree: Tree,
     cache: Cache,
     broken: bool,
-    _lock: File,
+    lock: File,
 }
 
 impl Session {
@@ -75,7 +75,7 @@ impl Session {
             paths,
             tree,
             cache,
-            _lock: lock,
+            lock,
             broken: false,
         };
 
@@ -620,6 +620,13 @@ impl Session {
         }
 
         cleanup_result
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        // In case file descriptor got shared with a child process
+        let _ = self.lock.unlock();
     }
 }
 
