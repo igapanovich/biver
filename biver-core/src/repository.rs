@@ -1,22 +1,21 @@
 use crate::data::{BranchName, ContentBlobKind, Head, Tree, Version, VersionId};
 use crate::error::Result;
+use crate::repository::common::maybe_store_preview;
 use crate::utilities::{hash, nickname};
 use crate::{Configuration, Error};
 use chrono::Utc;
 use derive_more::IsVariant;
 pub use paths::RepositoryPaths;
+pub use session::*;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 mod common;
 mod paths;
 mod preview;
 mod session;
-
-use crate::repository::common::try_store_preview;
-pub use session::*;
 
 const SCHEMA_VERSION: u32 = 2;
 
@@ -26,10 +25,7 @@ pub enum TryStartSessionResult {
     NotInitialized,
 }
 
-pub fn try_start_session(
-    config: Configuration,
-    versioned_file_path: PathBuf,
-) -> Result<TryStartSessionResult> {
+pub fn try_start_session(versioned_file_path: &Path) -> Result<TryStartSessionResult> {
     let paths = RepositoryPaths::new(versioned_file_path);
 
     if !initialized_internal(&paths)? {
@@ -38,11 +34,15 @@ pub fn try_start_session(
 
     validate_schema_version(&paths)?;
 
-    let tree = read_tree(&paths)?;
+    let tree_str = fs::read(paths.tree_file())?;
+    let tree = serde_json::from_slice(&tree_str)?;
 
-    Ok(TryStartSessionResult::Ok(Session::new(
-        config, paths, tree,
-    )?))
+    let config_str = fs::read(paths.config_file())?;
+    let config = toml::de::from_slice(&config_str)?;
+
+    let session = Session::new(config, paths, tree)?;
+
+    Ok(TryStartSessionResult::Ok(session))
 }
 
 #[derive(Debug, IsVariant)]
@@ -53,7 +53,7 @@ pub enum InitializeResult {
 
 pub fn initialize(
     config: Configuration,
-    versioned_file_path: PathBuf,
+    versioned_file_path: &Path,
     branch: Option<BranchName>,
     description: String,
 ) -> Result<InitializeResult> {
@@ -70,6 +70,9 @@ pub fn initialize(
 
     fs::write(paths.schema_version_file(), SCHEMA_VERSION.to_string())?;
 
+    let config_str = toml::ser::to_string(&config)?;
+    fs::write(paths.config_file(), config_str)?;
+
     let versioned_file_xxh3_128 = hash::xxh3_128(File::open(&paths.versioned_file())?)?;
     let versioned_file_length = fs::metadata(&paths.versioned_file())?.len();
 
@@ -78,9 +81,8 @@ pub fn initialize(
     let branch = branch.unwrap_or_default();
 
     let content_blob_file_path = paths.content_blob_path(new_version_id);
-    let preview_blob_file_path = paths.preview_path(new_version_id);
 
-    let has_preview = try_store_preview(&config, &paths.versioned_file(), &preview_blob_file_path)?;
+    let has_preview = maybe_store_preview(&config, &paths, new_version_id)?;
 
     let new_version = Version {
         id: new_version_id,
@@ -107,7 +109,7 @@ pub fn initialize(
 }
 
 pub fn initialized(versioned_file_path: &Path) -> Result<bool> {
-    Ok(fs::exists(paths::tree_file(versioned_file_path))?)
+    initialized_internal(&RepositoryPaths::new(versioned_file_path))
 }
 
 fn initialized_internal(paths: &RepositoryPaths) -> Result<bool> {
@@ -130,11 +132,4 @@ fn validate_schema_version(paths: &RepositoryPaths) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn read_tree(paths: &RepositoryPaths) -> Result<Tree> {
-    let data_file_contents = fs::read(paths.tree_file())?;
-    let repository_data = serde_json::from_slice(&data_file_contents)?;
-
-    Ok(repository_data)
 }

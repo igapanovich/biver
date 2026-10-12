@@ -1,5 +1,4 @@
 use crate::{test_config, test_dir};
-use biver_core::Configuration;
 use biver_core::repository;
 use std::error::Error;
 use std::path::PathBuf;
@@ -8,7 +7,6 @@ use std::{env, fs};
 pub struct TestEnvInitialized {
     pub root_path: PathBuf,
     pub versioned_file_path: PathBuf,
-    pub config: Configuration,
 }
 
 impl Drop for TestEnvInitialized {
@@ -29,16 +27,10 @@ pub fn create_initialized(
     fs::write(&versioned_file_path, versioned_file_content)?;
     let config = test_config::create();
 
-    repository::initialize(
-        config.clone(),
-        versioned_file_path.clone(),
-        None,
-        "".to_string(),
-    )?;
+    repository::initialize(config, &versioned_file_path, None, "".to_string())?;
 
     Ok(TestEnvInitialized {
         root_path,
         versioned_file_path,
-        config,
     })
 }

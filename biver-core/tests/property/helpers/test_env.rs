@@ -63,9 +63,7 @@ impl TestEnv {
     }
 
     pub fn start_session(&self) -> Session {
-        let result =
-            repository::try_start_session(self.config.clone(), self.versioned_file_path.clone())
-                .unwrap();
+        let result = repository::try_start_session(&self.versioned_file_path).unwrap();
         match result {
             TryStartSessionResult::Ok(session) => session,
             TryStartSessionResult::NotInitialized => panic!("Repository was not initialized"),

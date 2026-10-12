@@ -49,8 +49,8 @@ impl InitialBranchBlueprint {
         self.first_version.changes.execute(&versioned_file_path);
 
         let init_result = repository::initialize(
-            config.clone(),
-            versioned_file_path.to_path_buf(),
+            config,
+            versioned_file_path,
             self.name.clone(),
             self.first_version.description.clone(),
         )
@@ -58,7 +58,7 @@ impl InitialBranchBlueprint {
 
         assert!(init_result.is_ok());
 
-        let mut session = repository::try_start_session(config, versioned_file_path.to_path_buf())
+        let mut session = repository::try_start_session(versioned_file_path)
             .unwrap()
             .unwrap();
 

@@ -15,26 +15,28 @@ pub struct RepositoryPaths {
     tree_backup3_file: PathBuf,
     tree_backup4_file: PathBuf,
     tree_backup5_file: PathBuf,
+    config_file: PathBuf,
     schema_version: PathBuf,
     lock_file: PathBuf,
 }
 
 impl RepositoryPaths {
-    pub fn new(versioned_file_path: PathBuf) -> Self {
+    pub fn new(versioned_file_path: &Path) -> Self {
         let repository_dir = repository_dir(&versioned_file_path);
         let backup_dir = repository_dir.join("backup");
 
         RepositoryPaths {
-            versioned_file: versioned_file_path,
+            versioned_file: versioned_file_path.to_path_buf(),
             content_blob_dir: repository_dir.join("content"),
             preview_dir: repository_dir.join("preview"),
-            tree_file: tree_file_internal(&repository_dir),
+            tree_file: repository_dir.join("data"),
             tree_backup1_file: backup_dir.join("data_backup1.json"),
             tree_backup2_file: backup_dir.join("data_backup2.json"),
             tree_backup3_file: backup_dir.join("data_backup3.json"),
             tree_backup4_file: backup_dir.join("data_backup4.json"),
             tree_backup5_file: backup_dir.join("data_backup5.json"),
             backup_dir,
+            config_file: repository_dir.join("config.toml"),
             schema_version: repository_dir.join("schema_version"),
             lock_file: repository_dir.join("lock"),
             repository_dir,
@@ -59,6 +61,10 @@ impl RepositoryPaths {
 
     pub fn backup_dir(&self) -> &Path {
         &self.backup_dir
+    }
+
+    pub fn config_file(&self) -> &Path {
+        &self.config_file
     }
 
     pub fn schema_version_file(&self) -> &Path {
@@ -100,14 +106,6 @@ impl RepositoryPaths {
     pub fn preview_path(&self, version_id: VersionId) -> PathBuf {
         self.preview_dir.join(version_id_file_name(version_id))
     }
-}
-
-pub fn tree_file(versioned_file_path: &Path) -> PathBuf {
-    tree_file_internal(&repository_dir(versioned_file_path))
-}
-
-fn tree_file_internal(repository_dir: &Path) -> PathBuf {
-    repository_dir.join("data")
 }
 
 fn repository_dir(versioned_file_path: &Path) -> PathBuf {

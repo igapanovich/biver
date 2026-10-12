@@ -11,6 +11,7 @@ use biver_core::repository::{
 };
 use clap::Parser;
 use colored::Colorize;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::io::{IsTerminal, Read, Seek};
 use std::process::ExitCode;
@@ -52,14 +53,12 @@ fn main() -> ExitCode {
 }
 
 fn run_command(command: Command) -> Result<()> {
-    let config = config()?;
-
     match command {
         Command::Status {
             versioned_file_path,
             all,
         } => {
-            let session_result = repository::try_start_session(config, versioned_file_path)?;
+            let session_result = repository::try_start_session(&versioned_file_path)?;
 
             match session_result {
                 TryStartSessionResult::NotInitialized => println!("Not initialized"),
@@ -79,7 +78,7 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             target,
         } => {
-            let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+            let session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
             let (_, preview) = preview(&session, Some(&target))?;
 
@@ -93,7 +92,7 @@ fn run_command(command: Command) -> Result<()> {
             target1,
             target2,
         } => {
-            let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+            let session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
             let (description1, preview1) = preview(&session, Some(&target1))?;
             let (description2, preview2) = preview(&session, target2.as_deref())?;
@@ -118,9 +117,11 @@ fn run_command(command: Command) -> Result<()> {
                 }
             };
 
+            let config = core_config(versioned_file_path.extension())?;
+
             let init_result = repository::initialize(
                 config,
-                versioned_file_path,
+                &versioned_file_path,
                 branch_name,
                 description.unwrap_or_default(),
             )?;
@@ -135,7 +136,7 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             description,
         } => {
-            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
             let result = session.commit(description.unwrap_or_default())?;
             match result {
@@ -152,7 +153,7 @@ fn run_command(command: Command) -> Result<()> {
         } => {
             fail_with_untested()?;
 
-            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
             if !confirmed {
                 println!("Are you sure you want to overwrite the head version? (y/N)");
@@ -179,7 +180,7 @@ fn run_command(command: Command) -> Result<()> {
             target,
             description,
         } => {
-            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
             let Some(target_id) = target_expression::resolve_version(&session, &target) else {
                 return error("Invalid target");
@@ -197,7 +198,7 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             confirmed,
         } => {
-            let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+            let session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
             if !session.has_uncommitted_changes()? {
                 return warning("No uncommitted changes");
@@ -223,7 +224,7 @@ fn run_command(command: Command) -> Result<()> {
         } => {
             fail_with_untested()?;
 
-            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
             if !confirmed {
                 println!("Are you sure you want to reset? (y/N)");
@@ -253,7 +254,7 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             target,
         } => {
-            let mut session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
             let Some(target) = target_expression::resolve_branch_or_version(&session, &target)
             else {
@@ -295,7 +296,7 @@ fn run_command(command: Command) -> Result<()> {
 
             let output = output.unwrap_or_else(|| versioned_file_path.clone());
 
-            let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+            let session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
             let Some(target) = target_expression::resolve_version(&session, &target) else {
                 return error("Invalid target");
@@ -321,8 +322,7 @@ fn run_command(command: Command) -> Result<()> {
                     return error("Invalid branch name");
                 };
 
-                let mut session =
-                    repository::try_start_session(config, versioned_file_path)?.ok()?;
+                let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
                 let head_version_d = session.tree().head_version_id();
 
@@ -340,7 +340,7 @@ fn run_command(command: Command) -> Result<()> {
             BranchCommand::List {
                 versioned_file_path,
             } => {
-                let session = repository::try_start_session(config, versioned_file_path)?.ok()?;
+                let session = repository::try_start_session(&versioned_file_path)?.ok()?;
                 formatting::print_branch_list(session.tree());
                 success()
             }
@@ -358,8 +358,7 @@ fn run_command(command: Command) -> Result<()> {
                     return error("Invalid new branch name");
                 };
 
-                let mut session =
-                    repository::try_start_session(config, versioned_file_path)?.ok()?;
+                let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
                 let result = session.rename_branch(old_name, new_name)?;
 
@@ -383,8 +382,7 @@ fn run_command(command: Command) -> Result<()> {
                     return error("Invalid branch name");
                 };
 
-                let mut session =
-                    repository::try_start_session(config, versioned_file_path)?.ok()?;
+                let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
 
                 if !confirmed {
                     println!("Are you sure you want to delete this branch? (y/N)");
@@ -432,27 +430,50 @@ fn read_yes_no_input() -> Result<Option<bool>> {
     Ok(None)
 }
 
-fn into_core_configuration(value: biver_configuration::Configuration) -> biver_core::Configuration {
-    biver_core::Configuration {
-        create_patch_command: value.create_patch_command,
-        apply_patch_command: value.apply_patch_command,
-        file_type_rules: value
+fn core_config(versioned_file_extension: Option<&OsStr>) -> Result<biver_core::Configuration> {
+    let global_config = biver_configuration::read_global()?;
+
+    let default = global_config.default_file_type_rules;
+
+    let file_rule = if let Some(versioned_file_extension) = versioned_file_extension {
+        global_config
             .file_type_rules
             .into_iter()
-            .map(into_core_file_type_rule)
-            .collect(),
-    }
-}
+            .filter(|fr| {
+                fr.extensions
+                    .iter()
+                    .any(|e| OsString::from(e) == versioned_file_extension)
+            })
+            .next()
+    } else {
+        None
+    };
 
-fn into_core_file_type_rule(value: biver_configuration::FileTypeRule) -> biver_core::FileTypeRule {
-    biver_core::FileTypeRule {
-        extensions: value.extensions,
-        preview_command: value.preview_command,
-    }
-}
+    let mut create_patch_command = default.create_patch_command;
+    let mut apply_patch_command = default.apply_patch_command;
+    let mut preview_command = default.preview_command;
 
-fn config() -> Result<biver_core::Configuration> {
-    Ok(into_core_configuration(biver_configuration::read()?))
+    if let Some(file_rule) = file_rule {
+        if let Some(c) = file_rule.create_patch_command {
+            create_patch_command = c;
+        }
+
+        if let Some(c) = file_rule.apply_patch_command {
+            apply_patch_command = c;
+        }
+
+        if let Some(c) = file_rule.preview_command {
+            preview_command = Some(c);
+        }
+    }
+
+    let config = biver_core::Configuration {
+        create_patch_command,
+        apply_patch_command,
+        preview_command,
+    };
+
+    Ok(config)
 }
 
 fn init_tracing() {
@@ -480,12 +501,7 @@ fn preview<'a>(
     session: &'a Session,
     target_expr: Option<&'a str>,
 ) -> Result<(&'a str, impl Read + Seek)> {
-    let Some(target_expr) = target_expr else {
-        return Ok((
-            target_expression::UNCOMMITTED_CHANGES_EXPRESSION,
-            session.preview_versioned_file()?,
-        ));
-    };
+    let target_expr = target_expr.unwrap_or(target_expression::UNCOMMITTED_CHANGES_EXPRESSION);
 
     let Some(target) = target_expression::resolve_version_or_uncommitted(session, target_expr)
     else {
@@ -493,14 +509,12 @@ fn preview<'a>(
     };
 
     let preview = match target {
-        VersionOrUncommitted::Version(version_id) => {
-            let Some(preview) = session.preview(version_id)? else {
-                return error(format!("No preview available for {}", target_expr));
-            };
-
-            preview
-        }
+        VersionOrUncommitted::Version(version_id) => session.preview(version_id)?,
         VersionOrUncommitted::Uncommitted => session.preview_versioned_file()?,
+    };
+
+    let Some(preview) = preview else {
+        return error(format!("No preview available for {}", target_expr));
     };
 
     Ok((target_expr, preview))

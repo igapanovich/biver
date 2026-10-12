@@ -1,9 +1,8 @@
 use crate::configuration::Configuration;
-use crate::data::Tree;
-use crate::error::{Error, Result};
+use crate::data::{Tree, VersionId};
+use crate::error::Result;
 use crate::repository::paths::RepositoryPaths;
-use crate::utilities::external_command;
-use itertools::Itertools;
+use crate::utilities::external_preview_command::create_preview;
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
@@ -39,51 +38,22 @@ pub fn write_tree(paths: &RepositoryPaths, repo: &Tree) -> Result<()> {
     Ok(())
 }
 
-pub fn try_store_preview(
+pub fn maybe_store_preview(
     config: &Configuration,
-    preview_source: &Path,
-    destination: &Path,
+    paths: &RepositoryPaths,
+    version_id: VersionId,
 ) -> Result<bool> {
-    let Some(extension) = preview_source.extension().and_then(|e| e.to_str()) else {
-        return Ok(false);
-    };
+    if let Some(preview_command) = &config.preview_command {
+        create_preview(
+            preview_command,
+            &paths.versioned_file(),
+            &paths.preview_path(version_id),
+        )?;
 
-    let file_type_rules = config
-        .file_type_rules
-        .iter()
-        .filter_map(|fr| {
-            if fr.extensions.iter().any(|e| e == extension) {
-                Some(fr)
-            } else {
-                None
-            }
-        })
-        .collect_vec();
-
-    if file_type_rules.len() > 1 {
-        return Err(Error::InvalidConfig(format!(
-            "Extension '{}' matches more than one file type rule",
-            extension
-        )));
+        Ok(true)
+    } else {
+        Ok(false)
     }
-
-    let Some(file_type_rule) = file_type_rules.get(0) else {
-        return Ok(false);
-    };
-
-    let Some(preview_command_template) = file_type_rule.preview_command.as_ref() else {
-        return Ok(false);
-    };
-
-    external_command::run_templated_command(
-        preview_command_template,
-        &[
-            ("in", &*preview_source.to_string_lossy()),
-            ("out", &*destination.to_string_lossy()),
-        ],
-    )?;
-
-    Ok(true)
 }
 
 fn rotate_backup(previous: &Path, next: &Path, interval: Duration) -> Result<()> {

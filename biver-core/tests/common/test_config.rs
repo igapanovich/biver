@@ -12,6 +12,6 @@ pub fn create() -> Configuration {
         apply_patch_command: string_vec(&[
             "xdelta3", "-D", "-d", "-s", "{old}", "{patch}", "{new}",
         ]),
-        file_type_rules: vec![],
+        preview_command: None,
     }
 }

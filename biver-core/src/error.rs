@@ -11,6 +11,12 @@ pub enum Error {
     #[error("json deserialization error: {0}")]
     JsonDeserialization(#[from] serde_json::Error),
 
+    #[error("toml serialization error: {0}")]
+    TomlSerialization(#[from] toml::ser::Error),
+
+    #[error("toml deserialization error: {0}")]
+    TomlDeserialization(#[from] toml::de::Error),
+
     #[error("invalid configuration: {0}")]
     InvalidConfig(String),
 

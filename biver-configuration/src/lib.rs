@@ -7,19 +7,27 @@ static DEFAULT_CONFIG_STR: &str = include_str!("default_config.toml");
 const CONFIG_FILE_NAME: &str = "config.toml";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Configuration {
-    pub create_patch_command: Vec<String>,
-    pub apply_patch_command: Vec<String>,
-    pub file_type_rules: Vec<FileTypeRule>,
+pub struct GlobalConfiguration {
+    pub default_file_type_rules: DefaultFileTypeRules,
+    pub file_type_rules: Vec<FileTypeRules>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct FileTypeRule {
-    pub extensions: Vec<String>,
+pub struct DefaultFileTypeRules {
+    pub create_patch_command: Vec<String>,
+    pub apply_patch_command: Vec<String>,
     pub preview_command: Option<Vec<String>>,
 }
 
-pub fn read() -> Result<Configuration, Error> {
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FileTypeRules {
+    pub extensions: Vec<String>,
+    pub create_patch_command: Option<Vec<String>>,
+    pub apply_patch_command: Option<Vec<String>>,
+    pub preview_command: Option<Vec<String>>,
+}
+
+pub fn read_global() -> Result<GlobalConfiguration, Error> {
     let config_dir = biver_directories::config()?;
     fs::create_dir_all(&config_dir)?;
     let config_file = config_dir.join(CONFIG_FILE_NAME);
@@ -48,6 +56,6 @@ pub enum Error {
 
 #[test]
 fn default_config_is_valid() -> Result<(), toml::de::Error> {
-    toml::from_str::<Configuration>(DEFAULT_CONFIG_STR)?;
+    toml::from_str::<GlobalConfiguration>(DEFAULT_CONFIG_STR)?;
     Ok(())
 }

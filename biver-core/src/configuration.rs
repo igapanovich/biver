@@ -1,12 +1,10 @@
-#[derive(Debug, Clone)]
-pub struct Configuration {
-    pub create_patch_command: Vec<String>,
-    pub apply_patch_command: Vec<String>,
-    pub file_type_rules: Vec<FileTypeRule>,
-}
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
-pub struct FileTypeRule {
-    pub extensions: Vec<String>,
-    pub preview_command: Option<Vec<String>>,
+pub type ExternalCommand = Vec<String>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Configuration {
+    pub create_patch_command: ExternalCommand,
+    pub apply_patch_command: ExternalCommand,
+    pub preview_command: Option<ExternalCommand>,
 }

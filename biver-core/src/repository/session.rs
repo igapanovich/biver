@@ -1,8 +1,9 @@
 use crate::data::{BranchName, ContentBlobKind, Head, Tree, Version, VersionId};
 use crate::error::Result;
-use crate::repository::common::{try_store_preview, write_tree};
+use crate::repository::common::{maybe_store_preview, write_tree};
 use crate::repository::paths::RepositoryPaths;
 use crate::repository::preview::Preview;
+use crate::utilities::external_preview_command::create_preview;
 use crate::utilities::{external_diff_command, hash, nickname};
 use crate::{Configuration, Error, temp_file};
 use chrono::Utc;
@@ -125,11 +126,17 @@ impl Session {
             )?;
             fs::remove_file(temp_parent_version_file_path)?;
 
-            let has_preview = try_store_preview(
-                &self.config,
-                &self.paths.versioned_file(),
-                &self.paths.preview_path(new_version_id),
-            )?;
+            let has_preview = if let Some(preview_command) = &self.config.preview_command {
+                create_preview(
+                    preview_command,
+                    &self.paths.versioned_file(),
+                    &self.paths.preview_path(new_version_id),
+                )?;
+
+                true
+            } else {
+                false
+            };
 
             let new_version = Version {
                 id: new_version_id,
@@ -219,11 +226,7 @@ impl Session {
                 ContentBlobKind::Patch
             };
 
-            let has_preview = try_store_preview(
-                &self.config,
-                &self.paths.versioned_file(),
-                &self.paths.preview_path(new_version_id),
-            )?;
+            let has_preview = maybe_store_preview(&self.config, &self.paths, new_version_id)?;
 
             let new_version = Version {
                 id: new_version_id,
@@ -497,12 +500,15 @@ impl Session {
         Ok(Some(Preview::new(path)?))
     }
 
-    pub fn preview_versioned_file(&self) -> Result<Preview> {
+    pub fn preview_versioned_file(&self) -> Result<Option<Preview>> {
+        let Some(preview_command) = &self.config.preview_command else {
+            return Ok(None);
+        };
+
         let temp = temp_file::new_path();
+        create_preview(preview_command, self.paths.versioned_file(), &temp)?;
 
-        try_store_preview(&self.config, self.paths.versioned_file(), &temp)?;
-
-        Ok(Preview::new(temp)?.with_cleanup())
+        Ok(Some(Preview::new(temp)?.with_cleanup()))
     }
 
     fn write_tree(&self) -> Result<()> {

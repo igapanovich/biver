@@ -8,11 +8,9 @@ use std::error::Error;
 fn can_not_start_parallel_sessions() -> Result<(), Box<dyn Error>> {
     let env = test_env::create_initialized(samples::SAMPLE1)?;
 
-    let _session1 =
-        repository::try_start_session(env.config.clone(), env.versioned_file_path.clone())?;
+    let _session1 = repository::try_start_session(&env.versioned_file_path)?;
 
-    let session2_result =
-        repository::try_start_session(env.config.clone(), env.versioned_file_path.clone());
+    let session2_result = repository::try_start_session(&env.versioned_file_path);
 
     assert_matches!(session2_result, Err(biver_core::Error::RepositoryLocked));
 
@@ -23,13 +21,11 @@ fn can_not_start_parallel_sessions() -> Result<(), Box<dyn Error>> {
 fn can_start_sessions_sequentially() -> Result<(), Box<dyn Error>> {
     let env = test_env::create_initialized(samples::SAMPLE1)?;
 
-    let session1 =
-        repository::try_start_session(env.config.clone(), env.versioned_file_path.clone())?;
+    let session1 = repository::try_start_session(&env.versioned_file_path)?;
 
     drop(session1);
 
-    let session2_result =
-        repository::try_start_session(env.config.clone(), env.versioned_file_path.clone());
+    let session2_result = repository::try_start_session(&env.versioned_file_path);
 
     assert_matches!(session2_result, Ok(_));
 

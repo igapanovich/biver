@@ -13,11 +13,11 @@ proptest! {
 
         fs::write(&env.versioned_file_path(), &init_bytes)?;
 
-        let init_result = repository::initialize(env.config().clone(), env.versioned_file_path().to_path_buf(), branch_name, description)?;
+        let init_result = repository::initialize(env.config().clone(), env.versioned_file_path(), branch_name, description)?;
 
         prop_assert!(init_result.is_ok());
 
-        let session = repository::try_start_session(env.config().clone(), env.versioned_file_path().to_path_buf())?.unwrap();
+        let session = repository::try_start_session(env.versioned_file_path())?.unwrap();
         let tree = session.tree();
 
         let mut root_content = Vec::new();
