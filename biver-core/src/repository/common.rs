@@ -47,7 +47,7 @@ pub fn maybe_store_preview(
         create_preview(
             preview_command,
             &paths.versioned_file(),
-            &paths.preview_path(version_id),
+            &paths.version_preview_file(version_id),
         )?;
 
         Ok(true)

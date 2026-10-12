@@ -105,8 +105,8 @@ fn repository_blueprint(options: &[TestEnvOption]) -> impl Strategy<Value = Repo
     let uncommitted_changes = if options.contains(&TestEnvOption::NoUncommittedChanges) {
         Just(None).boxed()
     } else if options.contains(&TestEnvOption::UncommittedChanges) {
-        vec(file_operation_non_empty_insert(), 1..=1)
-            .prop_map(Some)
+        file_operation_non_empty_insert()
+            .prop_map(|i| Some(vec![i]))
             .boxed()
     } else {
         option::of(vec(file_operation(), 1..=4)).boxed()

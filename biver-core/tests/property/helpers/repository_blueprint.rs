@@ -85,7 +85,7 @@ impl BranchBlueprint {
 
         loop {
             let result = session
-                .create_branch(self.name.clone(), diverge_at_id)
+                .create_branch(branch_name.clone(), diverge_at_id)
                 .unwrap();
 
             match result {

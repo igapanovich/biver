@@ -1,3 +1,4 @@
+use crate::cache::Cache;
 use crate::data::{BranchName, ContentBlobKind, Head, Tree, Version, VersionId};
 use crate::error::Result;
 use crate::repository::common::{maybe_store_preview, write_tree};
@@ -44,6 +45,7 @@ pub struct Session {
     config: Configuration,
     paths: RepositoryPaths,
     tree: Tree,
+    cache: Cache,
     broken: bool,
     _lock: File,
 }
@@ -53,6 +55,7 @@ impl Session {
         config: Configuration,
         paths: RepositoryPaths,
         tree: Tree,
+        cache: Cache,
     ) -> Result<Session> {
         let lock = OpenOptions::new()
             .read(true)
@@ -71,6 +74,7 @@ impl Session {
             config,
             paths,
             tree,
+            cache,
             _lock: lock,
             broken: false,
         };
@@ -115,7 +119,7 @@ impl Session {
 
             let new_version_id = VersionId::new();
 
-            let content_blob_file_path = self.paths.content_blob_path(new_version_id);
+            let content_blob_file_path = self.paths.version_content_blob_file(new_version_id);
 
             let temp_parent_version_file_path = temp_file::new_path();
             self.extract_version_content(head.id, &temp_parent_version_file_path)?;
@@ -130,7 +134,7 @@ impl Session {
                 create_preview(
                     preview_command,
                     &self.paths.versioned_file(),
-                    &self.paths.preview_path(new_version_id),
+                    &self.paths.version_preview_file(new_version_id),
                 )?;
 
                 true
@@ -158,6 +162,13 @@ impl Session {
                 .get_mut(head_branch)
                 .expect("Head must point at a valid branch");
             *head_branch_tip = new_version_id;
+
+            self.cache.set_branch_tip(
+                head_branch.clone(),
+                new_version_id,
+                self.paths.versioned_file(),
+            )?;
+            self.cache.flush()?;
 
             write_tree(&self.paths, &self.tree)?;
 
@@ -208,7 +219,7 @@ impl Session {
 
             let new_version_id = VersionId::new();
 
-            let content_blob_file_path = self.paths.content_blob_path(new_version_id);
+            let content_blob_file_path = self.paths.version_content_blob_file(new_version_id);
             let content_blob_kind = if erased_version.is_root() {
                 fs::copy(self.paths.versioned_file(), &content_blob_file_path)?;
 
@@ -250,6 +261,13 @@ impl Session {
                 .expect("Head must point at a valid branch");
             *head_branch_tip = new_version_id;
 
+            self.cache.set_branch_tip(
+                head_branch.clone(),
+                new_version_id,
+                self.paths.versioned_file(),
+            )?;
+            self.cache.flush()?;
+
             self.write_tree()?;
 
             let cleanup_result = self.cleanup_erased_version_blobs([erased_version.id]);
@@ -275,11 +293,15 @@ impl Session {
                 return Ok(CheckOutBranchResult::BranchNotFound);
             }
 
-            self.tree.head = Head::Branch(branch);
+            self.tree.head = Head::Branch(branch.clone());
             let new_head_version_id = self.tree.head_version_id();
 
             self.write_tree()?;
             self.overwrite_versioned_file_with_version(new_head_version_id)?;
+
+            self.cache
+                .set_branch_tip(branch, new_head_version_id, self.paths.versioned_file())?;
+            self.cache.flush()?;
 
             Ok(CheckOutBranchResult::Ok)
         })
@@ -378,8 +400,10 @@ impl Session {
                 .branches
                 .get_mut(&head_branch)
                 .expect("Head must point at a valid branch");
-
             *head_branch_tip = stop_at_version_id;
+
+            self.cache.invalidate_branch_tip(&head_branch)?;
+            self.cache.flush()?;
 
             self.write_tree()?;
 
@@ -479,7 +503,7 @@ impl Session {
             return Ok(None);
         }
 
-        let path = self.paths.content_blob_path(version_id);
+        let path = self.paths.version_content_blob_file(version_id);
 
         let file = File::open(path)?;
 
@@ -495,7 +519,7 @@ impl Session {
             return Ok(None);
         }
 
-        let path = self.paths.preview_path(version_id);
+        let path = self.paths.version_preview_file(version_id);
 
         Ok(Some(Preview::new(path)?))
     }
@@ -525,16 +549,22 @@ impl Session {
         let mut chain = self
             .tree
             .version_and_ancestors(version_id)
-            .take_while_inclusive(|v| v.content_blob_kind.is_patch())
+            .map(|v| (v, self.cache.get(v.id)))
+            .take_while_inclusive(|(v, cache)| v.content_blob_kind.is_patch() && cache.is_none())
             .collect_vec();
 
         assert!(!chain.is_empty());
 
         chain.reverse();
 
-        let version = chain[0];
-        assert!(version.content_blob_kind.is_full());
-        let full_blob = self.paths.content_blob_path(version.id);
+        let (starting_version, cache) = &chain[0];
+
+        let full_blob = if let Some(cache) = cache {
+            cache
+        } else {
+            assert!(starting_version.content_blob_kind.is_full());
+            &self.paths.version_content_blob_file(starting_version.id)
+        };
 
         let a = temp_file::new_path();
         let b = temp_file::new_path();
@@ -549,10 +579,10 @@ impl Session {
             fs::copy(&full_blob, actual)?;
         }
 
-        for version in chain.iter().skip(1) {
+        for (version, _) in chain.iter().skip(1) {
             assert!(version.content_blob_kind.is_patch());
 
-            let patch = self.paths.content_blob_path(version.id);
+            let patch = self.paths.version_content_blob_file(version.id);
 
             if fs::exists(&stale)? {
                 fs::remove_file(&stale)?;
@@ -582,8 +612,8 @@ impl Session {
         let mut cleanup_result = CleanupResult::Ok;
 
         for id in version_ids.into_iter() {
-            if fs::remove_file(self.paths.content_blob_path(id)).is_err()
-                || fs::remove_file(self.paths.preview_path(id)).is_err()
+            if fs::remove_file(self.paths.version_content_blob_file(id)).is_err()
+                || fs::remove_file(self.paths.version_preview_file(id)).is_err()
             {
                 cleanup_result = CleanupResult::Failed;
             }

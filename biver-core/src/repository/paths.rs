@@ -15,6 +15,8 @@ pub struct RepositoryPaths {
     tree_backup3_file: PathBuf,
     tree_backup4_file: PathBuf,
     tree_backup5_file: PathBuf,
+    cache_data_file: PathBuf,
+    cache_dir: PathBuf,
     config_file: PathBuf,
     schema_version: PathBuf,
     lock_file: PathBuf,
@@ -29,13 +31,15 @@ impl RepositoryPaths {
             versioned_file: versioned_file_path.to_path_buf(),
             content_blob_dir: repository_dir.join("content"),
             preview_dir: repository_dir.join("preview"),
-            tree_file: repository_dir.join("data"),
+            tree_file: repository_dir.join("tree"),
             tree_backup1_file: backup_dir.join("data_backup1.json"),
             tree_backup2_file: backup_dir.join("data_backup2.json"),
             tree_backup3_file: backup_dir.join("data_backup3.json"),
             tree_backup4_file: backup_dir.join("data_backup4.json"),
             tree_backup5_file: backup_dir.join("data_backup5.json"),
             backup_dir,
+            cache_dir: repository_dir.join("cache"),
+            cache_data_file: repository_dir.join("cache.json"),
             config_file: repository_dir.join("config.toml"),
             schema_version: repository_dir.join("schema_version"),
             lock_file: repository_dir.join("lock"),
@@ -99,12 +103,24 @@ impl RepositoryPaths {
         &self.tree_backup5_file
     }
 
-    pub fn content_blob_path(&self, version_id: VersionId) -> PathBuf {
+    pub fn version_content_blob_file(&self, version_id: VersionId) -> PathBuf {
         self.content_blob_dir.join(version_id_file_name(version_id))
     }
 
-    pub fn preview_path(&self, version_id: VersionId) -> PathBuf {
+    pub fn version_preview_file(&self, version_id: VersionId) -> PathBuf {
         self.preview_dir.join(version_id_file_name(version_id))
+    }
+
+    pub fn cache_data_file(&self) -> &Path {
+        &self.cache_data_file
+    }
+
+    pub fn cache_dir(&self) -> &Path {
+        &self.cache_dir
+    }
+
+    pub fn version_content_cache_file(&self, version_id: VersionId) -> PathBuf {
+        self.cache_dir.join(version_id_file_name(version_id))
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::cache::Cache;
 use crate::data::{BranchName, ContentBlobKind, Head, Tree, Version, VersionId};
 use crate::error::Result;
 use crate::repository::common::maybe_store_preview;
@@ -17,7 +18,7 @@ mod paths;
 mod preview;
 mod session;
 
-const SCHEMA_VERSION: u32 = 2;
+const SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, IsVariant)]
 pub enum TryStartSessionResult {
@@ -37,10 +38,12 @@ pub fn try_start_session(versioned_file_path: &Path) -> Result<TryStartSessionRe
     let tree_str = fs::read(paths.tree_file())?;
     let tree = serde_json::from_slice(&tree_str)?;
 
+    let cache = Cache::read(&paths)?;
+
     let config_str = fs::read(paths.config_file())?;
     let config = toml::de::from_slice(&config_str)?;
 
-    let session = Session::new(config, paths, tree)?;
+    let session = Session::new(config, paths, tree, cache)?;
 
     Ok(TryStartSessionResult::Ok(session))
 }
@@ -67,6 +70,7 @@ pub fn initialize(
     fs::create_dir_all(paths.content_blob_dir())?;
     fs::create_dir_all(paths.preview_dir())?;
     fs::create_dir_all(paths.backup_dir())?;
+    fs::create_dir_all(paths.cache_dir())?;
 
     fs::write(paths.schema_version_file(), SCHEMA_VERSION.to_string())?;
 
@@ -80,7 +84,7 @@ pub fn initialize(
 
     let branch = branch.unwrap_or_default();
 
-    let content_blob_file_path = paths.content_blob_path(new_version_id);
+    let content_blob_file_path = paths.version_content_blob_file(new_version_id);
 
     let has_preview = maybe_store_preview(&config, &paths, new_version_id)?;
 
