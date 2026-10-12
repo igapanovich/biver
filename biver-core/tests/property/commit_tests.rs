@@ -32,7 +32,7 @@ proptest! {
         prop_assert!(diff.removed_branches.is_empty(), "successful commit does not remove branches");
         prop_assert_eq!(
             diff.upserted_branches.keys().collect_vec(),
-            vec![before.head.branch().unwrap()],
+            vec![before.head.branch_ref().unwrap()],
             "successful commit modifies head branch and only it"
         );
     }

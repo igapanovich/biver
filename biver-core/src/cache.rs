@@ -68,9 +68,22 @@ impl Cache {
         Ok(())
     }
 
-    pub fn invalidate_branch_tip(&mut self, branch_name: &BranchName) -> Result<()> {
+    pub fn invalidate_branch_tip(&mut self, branch_name: &BranchName) {
         self.remove_branch_tip(branch_name);
-        Ok(())
+    }
+
+    pub fn invalidate_all(&mut self) {
+        let branch_names = self
+            .data
+            .branch_tips
+            .iter()
+            .map(|(b, _)| b)
+            .cloned()
+            .collect_vec();
+
+        for name in branch_names {
+            self.invalidate_branch_tip(&name);
+        }
     }
 
     pub fn flush(&mut self) -> Result<()> {

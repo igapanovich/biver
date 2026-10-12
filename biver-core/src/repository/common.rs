@@ -1,9 +1,9 @@
-use crate::configuration::Configuration;
-use crate::data::{Tree, VersionId};
+use crate::data::Tree;
 use crate::error::Result;
 use crate::repository::paths::RepositoryPaths;
-use crate::utilities::external_preview_command::create_preview;
+use crate::utilities::hash;
 use std::fs;
+use std::fs::File;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
@@ -37,23 +37,15 @@ pub fn write_tree(paths: &RepositoryPaths, repo: &Tree) -> Result<()> {
 
     Ok(())
 }
+pub struct VersionedFileMeta {
+    pub length: u64,
+    pub xxh3_128: u128,
+}
 
-pub fn maybe_store_preview(
-    config: &Configuration,
-    paths: &RepositoryPaths,
-    version_id: VersionId,
-) -> Result<bool> {
-    if let Some(preview_command) = &config.preview_command {
-        create_preview(
-            preview_command,
-            &paths.versioned_file(),
-            &paths.version_preview_file(version_id),
-        )?;
-
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+pub fn versioned_file_meta(paths: &RepositoryPaths) -> Result<VersionedFileMeta> {
+    let xxh3_128 = hash::xxh3_128(File::open(&paths.versioned_file())?)?;
+    let length = fs::metadata(&paths.versioned_file())?.len();
+    Ok(VersionedFileMeta { length, xxh3_128 })
 }
 
 fn rotate_backup(previous: &Path, next: &Path, interval: Duration) -> Result<()> {

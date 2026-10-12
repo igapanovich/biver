@@ -1,10 +1,10 @@
 use crate::helpers::diff::Diff;
 use crate::helpers::extensions::IteratorExt;
-use derive_more::IsVariant;
 use std::collections::HashMap;
 use std::hash::Hash;
+use variantly::Variantly;
 
-#[derive(IsVariant)]
+#[derive(Variantly)]
 pub enum ValueDifference<T> {
     LeftMissing(T),
     RightMissing(T),

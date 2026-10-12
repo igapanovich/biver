@@ -1,7 +1,7 @@
-use derive_more::IsVariant;
 use serde::{Deserialize, Serialize};
+use variantly::Variantly;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, IsVariant)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Variantly)]
 pub enum ContentBlobKind {
     Full,
     Patch,

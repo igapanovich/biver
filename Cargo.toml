@@ -13,6 +13,6 @@ chrono = { version = "0.4.45", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.4"
 thiserror = "2.0.20"
-derive_more = { version = "2.1.1", features = ["is_variant"] }
+variantly = "0.4.0"
 tracing = "0.1.44"
 itertools = "0.15.0"

@@ -174,8 +174,8 @@ pub enum BranchCommand {
         new_name: String,
     },
 
-    /// Delete a branch
-    Delete {
+    /// Remove a branch
+    Remove {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 

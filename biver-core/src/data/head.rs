@@ -1,18 +1,9 @@
 use crate::data::{BranchName, VersionId};
-use derive_more::IsVariant;
 use serde::{Deserialize, Serialize};
+use variantly::Variantly;
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, IsVariant)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, Variantly)]
 pub enum Head {
     Branch(BranchName),
     Version(VersionId),
-}
-
-impl Head {
-    pub fn branch(&self) -> Option<&BranchName> {
-        match self {
-            Head::Branch(branch) => Some(branch),
-            Head::Version(_) => None,
-        }
-    }
 }

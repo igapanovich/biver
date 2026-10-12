@@ -222,6 +222,7 @@ mod prepared {
             .map(|(branch, branch_tip_id)| {
                 let join_version_id = tree
                     .version_and_ancestors(*branch_tip_id)
+                    .unwrap()
                     .map(|v| v.id)
                     .find(|id| head_version_ids.contains(id))
                     .unwrap();
@@ -250,7 +251,7 @@ mod prepared {
         let mut max_nickname_length = 0;
         let mut max_creation_time_humanized_length = 0;
 
-        let head_branch = tree.head().branch();
+        let head_branch = tree.head().branch_ref();
         let head_version_id = tree.head_version().id;
 
         for version in versions_to_prepare.iter() {

@@ -40,12 +40,6 @@ impl BranchName {
     }
 }
 
-impl Default for BranchName {
-    fn default() -> BranchName {
-        BranchName::new("main".to_string()).unwrap()
-    }
-}
-
 impl Debug for BranchName {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self)

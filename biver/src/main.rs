@@ -1,12 +1,12 @@
 use crate::command_line_arguments::{BranchCommand, Command, CommandLineArguments};
 use crate::error::{Error, Result, Severity, error, warning};
-use crate::extensions::OkExt;
+use crate::extensions::ResultExt;
 use crate::target_expression::{BranchOrVersion, VersionOrUncommitted};
 use biver_core::data::BranchName;
 use biver_core::repository;
 use biver_core::repository::{
     AmendResult, CheckOutBranchResult, CheckOutVersionResult, CommitResult, CreateBranchResult,
-    DeleteBranchResult, InitializeResult, RenameBranchResult, RestoreVersionResult, Session,
+    InitializeResult, RemoveBranchResult, RenameBranchResult, RestoreVersionResult, Session,
     SoftResetResult, TryStartSessionResult, UpdateDescriptionResult,
 };
 use clap::Parser;
@@ -78,7 +78,7 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             target,
         } => {
-            let session = repository::try_start_session(&versioned_file_path)?.ok()?;
+            let session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             let (_, preview) = preview(&session, Some(&target))?;
 
@@ -92,7 +92,7 @@ fn run_command(command: Command) -> Result<()> {
             target1,
             target2,
         } => {
-            let session = repository::try_start_session(&versioned_file_path)?.ok()?;
+            let session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             let (description1, preview1) = preview(&session, Some(&target1))?;
             let (description2, preview2) = preview(&session, target2.as_deref())?;
@@ -136,7 +136,7 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             description,
         } => {
-            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             let result = session.commit(description.unwrap_or_default())?;
             match result {
@@ -153,7 +153,7 @@ fn run_command(command: Command) -> Result<()> {
         } => {
             fail_with_untested()?;
 
-            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             if !confirmed {
                 println!("Are you sure you want to overwrite the head version? (y/N)");
@@ -169,8 +169,8 @@ fn run_command(command: Command) -> Result<()> {
                 AmendResult::Ok(_) => success_ok(),
                 AmendResult::NoUncommittedChanges => warning("No uncommitted changes"),
                 AmendResult::HeadMustBeBranch => error("Head must point at a branch"),
-                AmendResult::CannotAmendVersionBelongingToAnotherBranch => {
-                    error("Cannot amend head version because it also belongs to other branches")
+                AmendResult::CannotAmendRootWhenOtherBranchesExist => {
+                    error("Cannot amend root when there is more than one branch")
                 }
             }
         }
@@ -180,7 +180,7 @@ fn run_command(command: Command) -> Result<()> {
             target,
             description,
         } => {
-            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             let Some(target_id) = target_expression::resolve_version(&session, &target) else {
                 return error("Invalid target");
@@ -198,7 +198,7 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             confirmed,
         } => {
-            let session = repository::try_start_session(&versioned_file_path)?.ok()?;
+            let session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             if !session.has_uncommitted_changes()? {
                 return warning("No uncommitted changes");
@@ -224,7 +224,7 @@ fn run_command(command: Command) -> Result<()> {
         } => {
             fail_with_untested()?;
 
-            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             if !confirmed {
                 println!("Are you sure you want to reset? (y/N)");
@@ -242,11 +242,11 @@ fn run_command(command: Command) -> Result<()> {
 
             match result {
                 SoftResetResult::Ok(_) => success_ok(),
+                SoftResetResult::HeadBranchTipIsAlreadyThere => {
+                    warning("Head branch is already on the target")
+                }
                 SoftResetResult::HeadMustBeBranch => error("Head must be on a branch"),
-                SoftResetResult::InvalidResetRange => error("Invalid reset range"),
-                SoftResetResult::ResetRangeOverlapsWithOtherBranches => error(
-                    "Cannot reset because some of the erased versions belong to other branches",
-                ),
+                SoftResetResult::InvalidStopAtVersionId => error("Invalid reset range"),
             }
         }
 
@@ -254,7 +254,7 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             target,
         } => {
-            let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
+            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             let Some(target) = target_expression::resolve_branch_or_version(&session, &target)
             else {
@@ -296,7 +296,7 @@ fn run_command(command: Command) -> Result<()> {
 
             let output = output.unwrap_or_else(|| versioned_file_path.clone());
 
-            let session = repository::try_start_session(&versioned_file_path)?.ok()?;
+            let session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             let Some(target) = target_expression::resolve_version(&session, &target) else {
                 return error("Invalid target");
@@ -322,7 +322,7 @@ fn run_command(command: Command) -> Result<()> {
                     return error("Invalid branch name");
                 };
 
-                let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
+                let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
                 let head_version_d = session.tree().head_version_id();
 
@@ -340,7 +340,7 @@ fn run_command(command: Command) -> Result<()> {
             BranchCommand::List {
                 versioned_file_path,
             } => {
-                let session = repository::try_start_session(&versioned_file_path)?.ok()?;
+                let session = repository::try_start_session(&versioned_file_path)?.result()?;
                 formatting::print_branch_list(session.tree());
                 success()
             }
@@ -358,7 +358,7 @@ fn run_command(command: Command) -> Result<()> {
                     return error("Invalid new branch name");
                 };
 
-                let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
+                let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
                 let result = session.rename_branch(old_name, new_name)?;
 
@@ -367,13 +367,13 @@ fn run_command(command: Command) -> Result<()> {
                     RenameBranchResult::NewNameAlreadyExists => {
                         error("New name is already used by another branch")
                     }
-                    RenameBranchResult::OldBranchNotFound => {
+                    RenameBranchResult::OldNameNotFound => {
                         error("Old name does not belong to any branch")
                     }
                 }
             }
 
-            BranchCommand::Delete {
+            BranchCommand::Remove {
                 versioned_file_path,
                 confirmed,
                 name,
@@ -382,23 +382,23 @@ fn run_command(command: Command) -> Result<()> {
                     return error("Invalid branch name");
                 };
 
-                let mut session = repository::try_start_session(&versioned_file_path)?.ok()?;
+                let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
                 if !confirmed {
-                    println!("Are you sure you want to delete this branch? (y/N)");
+                    println!("Are you sure you want to remove this branch? (y/N)");
                     let confirmed = read_yes_no_input()?.unwrap_or(false);
                     if !confirmed {
                         return success();
                     }
                 }
 
-                let result = session.delete_branch(branch_name)?;
+                let result = session.remove_branch(&branch_name)?;
 
                 match result {
-                    DeleteBranchResult::Ok(_) => success_ok(),
-                    DeleteBranchResult::BranchNotFound => error("Branch does not exist"),
-                    DeleteBranchResult::CannotDeleteHead => {
-                        error("Cannot delete the version currently pointed at by head")
+                    RemoveBranchResult::Ok(_) => success_ok(),
+                    RemoveBranchResult::BranchNotFound => error("Branch does not exist"),
+                    RemoveBranchResult::CannotRemoveHeadBranch => {
+                        error("Cannot remove the version currently pointed at by head")
                     }
                 }
             }

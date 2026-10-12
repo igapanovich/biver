@@ -25,8 +25,8 @@ proptest! {
         prop_assert_eq!(&before.versions, &after.versions, "rename_branch does not modify versions");
         prop_assert_eq!(&before.versioned_file_content, &after.versioned_file_content, "rename_branch does not modify versioned file");
 
-        if before.head.branch() == Some(&old_branch_name) {
-            prop_assert_eq!(after.head.branch(), Some(&new_branch_name), "rename_branch updates head if it pointed at the renamed branch");
+        if before.head.branch_ref() == Some(&old_branch_name) {
+            prop_assert_eq!(after.head.branch_ref(), Some(&new_branch_name), "rename_branch updates head if it pointed at the renamed branch");
         } else {
             prop_assert_eq!(&before.head, &after.head, "rename_branch does not modify head if it wasn't pointing at the renamed branch");
         }
@@ -72,7 +72,7 @@ proptest! {
 
         let after = env.snapshot(&session);
 
-        prop_assert_eq!(result, RenameBranchResult::OldBranchNotFound, "rename_branch fails if the old branch name was not found");
+        prop_assert_eq!(result, RenameBranchResult::OldNameNotFound, "rename_branch fails if the old branch name was not found");
 
         prop_assert_eq!(before, after, "failed rename_branch does not modify anything");
     }

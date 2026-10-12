@@ -32,7 +32,10 @@ impl ResolveVersionPathExt for Tree {
 
         let branch = *path.branch.get(&branches);
         let branch_tip_id = self.branch_tip_ids()[branch];
-        let branch_versions_from_tip = self.version_and_ancestors(branch_tip_id).collect_vec();
+        let branch_versions_from_tip = self
+            .version_and_ancestors(branch_tip_id)
+            .unwrap()
+            .collect_vec();
 
         *path.depth_from_tip.get(&branch_versions_from_tip)
     }

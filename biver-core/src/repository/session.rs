@@ -1,19 +1,24 @@
 use crate::cache::Cache;
-use crate::data::{BranchName, ContentBlobKind, Head, Tree, Version, VersionId};
+use crate::data::tree::{
+    AddBranchError, MoveHeadToBranchError, MoveHeadToVersionError, NewVersion,
+    OverwriteBranchTipError, OverwriteBranchTipOutcome, PopBranchOutcome, RemoveBranchError,
+    RenameBranchError, VersionUpdate,
+};
+use crate::data::{BranchName, ContentBlobKind, Tree, VersionId};
 use crate::error::Result;
-use crate::repository::common::{maybe_store_preview, write_tree};
+use crate::repository::common::{versioned_file_meta, write_tree};
 use crate::repository::paths::RepositoryPaths;
 use crate::repository::preview::Preview;
 use crate::utilities::external_preview_command::create_preview;
-use crate::utilities::{external_diff_command, hash, nickname};
+use crate::utilities::{external_diff_command, hash};
 use crate::{Configuration, Error, temp_file};
 use chrono::Utc;
-use derive_more::IsVariant;
 use itertools::Itertools;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{Read, Seek};
 use std::path::Path;
 use std::{fs, mem};
+use variantly::Variantly;
 
 macro_rules! use_break {
     ($self:ident, $body:block) => {{
@@ -103,26 +108,39 @@ impl Session {
 
     pub fn commit(&mut self, description: String) -> Result<CommitResult> {
         use_break!(self, {
-            let Some(head_branch) = self.tree.head.branch() else {
+            let Some(head_branch) = self.tree.head_branch().cloned() else {
                 return Ok(CommitResult::HeadMustBeOnBranch);
             };
 
-            let versioned_file_xxh3_128 =
-                hash::xxh3_128(File::open(&self.paths.versioned_file())?)?;
-            let versioned_file_length = fs::metadata(&self.paths.versioned_file())?.len();
+            let versioned_file_meta = versioned_file_meta(&self.paths)?;
 
             let head = self.tree.head_version();
+            let head_version_id = head.id;
 
-            if versioned_file_xxh3_128 == head.versioned_file_xxh3_128 {
+            if versioned_file_meta.xxh3_128 == head.versioned_file_xxh3_128 {
                 return Ok(CommitResult::NoUncommittedChanges);
             }
 
-            let new_version_id = VersionId::new();
+            let preview_command = &self.config.preview_command;
+
+            let new_version_id = self
+                .tree
+                .extend_branch(
+                    &head_branch,
+                    NewVersion {
+                        creation_time: Utc::now(),
+                        versioned_file_length: versioned_file_meta.length,
+                        versioned_file_xxh3_128: versioned_file_meta.xxh3_128,
+                        description,
+                        content_blob_kind: ContentBlobKind::Patch,
+                        has_preview: preview_command.is_some(),
+                    },
+                )
+                .expect("Adding to head branch should succeed");
 
             let content_blob_file_path = self.paths.version_content_blob_file(new_version_id);
-
             let temp_parent_version_file_path = temp_file::new_path();
-            self.extract_version_content(head.id, &temp_parent_version_file_path)?;
+            self.extract_version_content(head_version_id, &temp_parent_version_file_path)?;
             self.store_patch(
                 &temp_parent_version_file_path,
                 self.paths.versioned_file(),
@@ -130,47 +148,18 @@ impl Session {
             )?;
             fs::remove_file(temp_parent_version_file_path)?;
 
-            let has_preview = if let Some(preview_command) = &self.config.preview_command {
+            if let Some(preview_command) = preview_command {
                 create_preview(
                     preview_command,
                     &self.paths.versioned_file(),
                     &self.paths.version_preview_file(new_version_id),
                 )?;
+            }
 
-                true
-            } else {
-                false
-            };
+            self.cache
+                .set_branch_tip(head_branch, new_version_id, self.paths.versioned_file())?;
 
-            let new_version = Version {
-                id: new_version_id,
-                creation_time: Utc::now(),
-                nickname: nickname::new_nickname(versioned_file_xxh3_128),
-                versioned_file_length,
-                versioned_file_xxh3_128,
-                description,
-                parent: Some(head.id),
-                content_blob_kind: ContentBlobKind::Patch,
-                has_preview,
-            };
-
-            self.tree.versions.push(new_version);
-
-            let head_branch_tip = self
-                .tree
-                .branches
-                .get_mut(head_branch)
-                .expect("Head must point at a valid branch");
-            *head_branch_tip = new_version_id;
-
-            self.cache.set_branch_tip(
-                head_branch.clone(),
-                new_version_id,
-                self.paths.versioned_file(),
-            )?;
-            self.cache.flush()?;
-
-            write_tree(&self.paths, &self.tree)?;
+            self.flush()?;
 
             Ok(CommitResult::Ok)
         })
@@ -178,99 +167,93 @@ impl Session {
 
     pub fn amend(&mut self, description: Option<String>) -> Result<AmendResult> {
         use_break!(self, {
-            let Some(head_branch) = self.tree.head.branch() else {
+            let Some(head_branch) = self.tree.head_branch().cloned() else {
                 return Ok(AmendResult::HeadMustBeBranch);
             };
 
-            let Some(head_branch_tip) = self
-                .tree
-                .branch_tip_and_ancestors_exclusive(head_branch)
-                .next()
-            else {
-                return Ok(AmendResult::CannotAmendVersionBelongingToAnotherBranch);
-            };
-
-            let head_branch_tip_index = self
-                .tree
-                .versions
-                .iter()
-                .enumerate()
-                .filter_map(|(i, v)| {
-                    if v.id == head_branch_tip.id {
-                        Some(i)
-                    } else {
-                        None
-                    }
-                })
-                .next()
-                .expect("Head branch tip should be in versions");
-
-            let erased_version = self.tree.versions.remove(head_branch_tip_index);
-
-            let versioned_file_xxh3_128 =
-                hash::xxh3_128(File::open(&self.paths.versioned_file())?)?;
-            let versioned_file_length = fs::metadata(&self.paths.versioned_file())?.len();
-
             let head = self.tree.head_version();
 
-            if versioned_file_xxh3_128 == head.versioned_file_xxh3_128 {
+            let versioned_file_meta = versioned_file_meta(&self.paths)?;
+
+            if versioned_file_meta.xxh3_128 == head.versioned_file_xxh3_128 {
                 return Ok(AmendResult::NoUncommittedChanges);
             }
 
-            let new_version_id = VersionId::new();
+            let head_branch_tip = self
+                .tree
+                .head_branch_tip()
+                .expect("Already validated head is on a branch");
 
-            let content_blob_file_path = self.paths.version_content_blob_file(new_version_id);
-            let content_blob_kind = if erased_version.is_root() {
-                fs::copy(self.paths.versioned_file(), &content_blob_file_path)?;
+            let head_branch_tip_parent = head_branch_tip.parent;
 
+            let content_blob_kind = if head_branch_tip.is_root() {
                 ContentBlobKind::Full
             } else {
-                let temp_parent_version_file = temp_file::new_path();
-                self.extract_version_content(head.id, &temp_parent_version_file)?;
-                self.store_patch(
-                    &temp_parent_version_file,
-                    self.paths.versioned_file(),
-                    &content_blob_file_path,
-                )?;
-                fs::remove_file(temp_parent_version_file)?;
-
                 ContentBlobKind::Patch
             };
 
-            let has_preview = maybe_store_preview(&self.config, &self.paths, new_version_id)?;
+            let preview_command = &self.config.preview_command;
 
-            let new_version = Version {
-                id: new_version_id,
-                creation_time: Utc::now(),
-                nickname: nickname::new_nickname(versioned_file_xxh3_128),
-                versioned_file_length,
-                versioned_file_xxh3_128,
-                description: description.unwrap_or(erased_version.description),
-                parent: erased_version.parent,
-                content_blob_kind,
-                has_preview,
+            let overwrite_result =
+                self.tree
+                    .overwrite_branch_tip(&head_branch, |previous| NewVersion {
+                        creation_time: Utc::now(),
+                        versioned_file_length: versioned_file_meta.length,
+                        versioned_file_xxh3_128: versioned_file_meta.xxh3_128,
+                        description: description.unwrap_or(previous.description.clone()),
+                        content_blob_kind,
+                        has_preview: preview_command.is_some(),
+                    });
+
+            let (new_version_id, removed_version_id) = match overwrite_result {
+                Ok(ok) => match ok {
+                    OverwriteBranchTipOutcome::OverwrittenVersionStillInUse {
+                        new_tip_id, ..
+                    } => (new_tip_id, None),
+                    OverwriteBranchTipOutcome::OverwrittenVersionRemoved {
+                        former_tip,
+                        new_tip_id,
+                    } => (new_tip_id, Some(former_tip.id)),
+                },
+                Err(err) => match err {
+                    OverwriteBranchTipError::BranchNotFound => panic!("Head branch not found"),
+                    OverwriteBranchTipError::CannotOverwriteRootWhenOtherBranchesExist => {
+                        return Ok(AmendResult::CannotAmendRootWhenOtherBranchesExist);
+                    }
+                },
             };
 
-            self.tree.versions.push(new_version);
-            self.tree.versions.retain(|v| v.id != erased_version.id);
+            let content_blob_file_path = self.paths.version_content_blob_file(new_version_id);
 
-            let head_branch_tip = self
-                .tree
-                .branches
-                .get_mut(head_branch)
-                .expect("Head must point at a valid branch");
-            *head_branch_tip = new_version_id;
+            match head_branch_tip_parent {
+                Some(parent_id) => {
+                    let temp_parent_version_file = temp_file::new_path();
+                    self.extract_version_content(parent_id, &temp_parent_version_file)?;
+                    self.store_patch(
+                        &temp_parent_version_file,
+                        self.paths.versioned_file(),
+                        &content_blob_file_path,
+                    )?;
+                    fs::remove_file(temp_parent_version_file)?;
+                }
+                None => {
+                    fs::copy(self.paths.versioned_file(), &content_blob_file_path)?;
+                }
+            }
 
             self.cache.set_branch_tip(
-                head_branch.clone(),
+                head_branch,
                 new_version_id,
-                self.paths.versioned_file(),
+                &self.paths.versioned_file().to_path_buf(),
             )?;
-            self.cache.flush()?;
 
-            self.write_tree()?;
+            self.flush()?;
 
-            let cleanup_result = self.cleanup_erased_version_blobs([erased_version.id]);
+            let cleanup_result = if let Some(removed_version_id) = removed_version_id {
+                self.cleanup_erased_version_blobs([removed_version_id])
+            } else {
+                CleanupResult::Ok
+            };
 
             Ok(AmendResult::Ok(cleanup_result))
         })
@@ -289,19 +272,21 @@ impl Session {
                 return Ok(CheckOutBranchResult::HasUncommittedChanges);
             }
 
-            if !self.tree.branches.contains_key(&branch) {
-                return Ok(CheckOutBranchResult::BranchNotFound);
+            if let Err(err) = self.tree.move_head_to_branch(branch.clone()) {
+                return match err {
+                    MoveHeadToBranchError::BranchNotFound => {
+                        Ok(CheckOutBranchResult::BranchNotFound)
+                    }
+                };
             }
 
-            self.tree.head = Head::Branch(branch.clone());
             let new_head_version_id = self.tree.head_version_id();
 
-            self.write_tree()?;
             self.overwrite_versioned_file_with_version(new_head_version_id)?;
-
             self.cache
                 .set_branch_tip(branch, new_head_version_id, self.paths.versioned_file())?;
-            self.cache.flush()?;
+
+            self.flush()?;
 
             Ok(CheckOutBranchResult::Ok)
         })
@@ -313,14 +298,17 @@ impl Session {
                 return Ok(CheckOutVersionResult::HasUncommittedChanges);
             }
 
-            if self.tree.version(version_id).is_none() {
-                return Ok(CheckOutVersionResult::VersionNotFound);
+            if let Err(err) = self.tree.move_head_to_version(version_id) {
+                return match err {
+                    MoveHeadToVersionError::VersionNotFound => {
+                        Ok(CheckOutVersionResult::VersionNotFound)
+                    }
+                };
             };
 
-            self.tree.head = Head::Version(version_id);
-
-            self.write_tree()?;
             self.overwrite_versioned_file_with_version(version_id)?;
+
+            self.flush()?;
 
             Ok(CheckOutVersionResult::Ok)
         })
@@ -332,13 +320,18 @@ impl Session {
         new_description: String,
     ) -> Result<UpdateDescriptionResult> {
         use_break!(self, {
-            let Some(version) = self.tree.version_mut(version_id) else {
+            let updated = self.tree.update_version(
+                version_id,
+                VersionUpdate {
+                    description: Some(new_description),
+                },
+            );
+
+            if !updated {
                 return Ok(UpdateDescriptionResult::VersionNotFound);
-            };
+            }
 
-            version.description = new_description;
-
-            self.write_tree()?;
+            self.flush()?;
 
             Ok(UpdateDescriptionResult::Ok)
         })
@@ -368,46 +361,59 @@ impl Session {
 
     pub fn soft_reset(&mut self, stop_at_version_id: VersionId) -> Result<SoftResetResult> {
         use_break!(self, {
-            let Some(head_branch) = self.tree.head.branch() else {
+            let Some(head_branch) = self.tree.head_branch().cloned() else {
                 return Ok(SoftResetResult::HeadMustBeBranch);
             };
 
-            let erased_versions = self
-                .tree
-                .branch_tip_and_ancestors_exclusive(head_branch)
-                .take_while(|v| v.id != stop_at_version_id)
-                .collect_vec();
+            let stop_at_version_index =
+                self.tree
+                    .head_and_ancestors()
+                    .enumerate()
+                    .find_map(|(i, v)| {
+                        if v.id == stop_at_version_id {
+                            Some(i)
+                        } else {
+                            None
+                        }
+                    });
 
-            let erased_versions_contain_root = erased_versions.iter().any(|v| v.is_root());
-            if erased_versions_contain_root {
-                return Ok(SoftResetResult::InvalidResetRange);
+            let Some(stop_at_version_index) = stop_at_version_index else {
+                return Ok(SoftResetResult::InvalidStopAtVersionId);
+            };
+
+            if stop_at_version_index == 0 {
+                return Ok(SoftResetResult::HeadBranchTipIsAlreadyThere);
             }
 
-            let erased_versions_reached_stop_at_version =
-                erased_versions.last().and_then(|v| v.parent) == Some(stop_at_version_id);
-            if !erased_versions_reached_stop_at_version {
-                return Ok(SoftResetResult::ResetRangeOverlapsWithOtherBranches);
+            let mut removed_version_ids = Vec::new();
+
+            loop {
+                let pop_ok = self
+                    .tree
+                    .pop_branch(&head_branch)
+                    .expect("Head branch is valid and it will not reach past root");
+
+                let new_tip_id = match pop_ok {
+                    PopBranchOutcome::PoppedVersionStillInUse { new_tip_id, .. } => new_tip_id,
+                    PopBranchOutcome::PoppedVersionRemoved {
+                        new_tip_id,
+                        former_tip,
+                    } => {
+                        removed_version_ids.push(former_tip.id);
+                        new_tip_id
+                    }
+                };
+
+                if new_tip_id == stop_at_version_id {
+                    break;
+                }
             }
 
-            let erased_version_ids = erased_versions.iter().map(|v| v.id).collect_vec();
+            self.cache.invalidate_branch_tip(&head_branch);
 
-            self.tree
-                .versions
-                .retain(|v| !erased_version_ids.contains(&v.id));
+            self.flush()?;
 
-            let head_branch_tip = self
-                .tree
-                .branches
-                .get_mut(&head_branch)
-                .expect("Head must point at a valid branch");
-            *head_branch_tip = stop_at_version_id;
-
-            self.cache.invalidate_branch_tip(&head_branch)?;
-            self.cache.flush()?;
-
-            self.write_tree()?;
-
-            let cleanup_result = self.cleanup_erased_version_blobs(erased_version_ids);
+            let cleanup_result = self.cleanup_erased_version_blobs(removed_version_ids);
 
             Ok(SoftResetResult::Ok(cleanup_result))
         })
@@ -419,16 +425,14 @@ impl Session {
         branch_tip_id: VersionId,
     ) -> Result<CreateBranchResult> {
         use_break!(self, {
-            if self.tree.branches.contains_key(&branch_name) {
-                return Ok(CreateBranchResult::AlreadyExists);
+            if let Err(err) = self.tree.add_branch(branch_name, branch_tip_id) {
+                return match err {
+                    AddBranchError::NameAlreadyExists => Ok(CreateBranchResult::AlreadyExists),
+                    AddBranchError::VersionNotFound => Ok(CreateBranchResult::InvalidBranchTipId),
+                };
             }
 
-            if self.tree.version(branch_tip_id).is_none() {
-                return Ok(CreateBranchResult::InvalidBranchTipId);
-            }
-
-            self.tree.branches.insert(branch_name, branch_tip_id);
-            self.write_tree()?;
+            self.flush()?;
 
             Ok(CreateBranchResult::Ok)
         })
@@ -444,57 +448,41 @@ impl Session {
                 return Ok(RenameBranchResult::Ok);
             }
 
-            if self.tree.branches.contains_key(&new_branch_name) {
-                return Ok(RenameBranchResult::NewNameAlreadyExists);
+            if let Err(err) = self.tree.rename_branch(&old_branch_name, new_branch_name) {
+                return match err {
+                    RenameBranchError::NewNameAlreadyExists => {
+                        Ok(RenameBranchResult::NewNameAlreadyExists)
+                    }
+                    RenameBranchError::OldNameNotFound => Ok(RenameBranchResult::OldNameNotFound),
+                };
             }
 
-            let Some(branch_version_id) = self.tree.branches.remove(&old_branch_name) else {
-                return Ok(RenameBranchResult::OldBranchNotFound);
-            };
-
-            if matches!(&self.tree.head, Head::Branch(b) if b == &old_branch_name) {
-                self.tree.head = Head::Branch(new_branch_name.clone());
-            }
-
-            self.tree
-                .branches
-                .insert(new_branch_name, branch_version_id);
-
-            self.write_tree()?;
+            self.flush()?;
 
             Ok(RenameBranchResult::Ok)
         })
     }
 
-    pub fn delete_branch(&mut self, branch_name: BranchName) -> Result<DeleteBranchResult> {
+    pub fn remove_branch(&mut self, branch_name: &BranchName) -> Result<RemoveBranchResult> {
         use_break!(self, {
-            if !self.tree.branches.contains_key(&branch_name) {
-                return Ok(DeleteBranchResult::BranchNotFound);
+            let removed_versions = match self.tree.remove_branch(branch_name) {
+                Ok(ok) => ok.removed_versions,
+                Err(err) => {
+                    return match err {
+                        RemoveBranchError::BranchNotFound => Ok(RemoveBranchResult::BranchNotFound),
+                        RemoveBranchError::CannotRemoveHeadBranch => {
+                            Ok(RemoveBranchResult::CannotRemoveHeadBranch)
+                        }
+                    };
+                }
             };
 
-            let erased_versions = self
-                .tree
-                .branch_tip_and_ancestors_exclusive(&branch_name)
-                .collect_vec();
+            self.flush()?;
 
-            let head_version_id = self.tree.head_version_id();
+            let cleanup_result =
+                self.cleanup_erased_version_blobs(removed_versions.iter().map(|v| v.id));
 
-            let erased_version_ids = erased_versions.iter().map(|v| v.id).collect_vec();
-
-            if erased_version_ids.contains(&head_version_id) {
-                return Ok(DeleteBranchResult::CannotDeleteHead);
-            }
-
-            self.tree.branches.remove(&branch_name);
-
-            self.tree
-                .versions
-                .retain(|v| !erased_version_ids.contains(&v.id));
-
-            self.write_tree()?;
-            let cleanup_result = self.cleanup_erased_version_blobs(erased_version_ids);
-
-            Ok(DeleteBranchResult::Ok(cleanup_result))
+            Ok(RemoveBranchResult::Ok(cleanup_result))
         })
     }
 
@@ -535,9 +523,15 @@ impl Session {
         Ok(Some(Preview::new(temp)?.with_cleanup()))
     }
 
-    fn write_tree(&self) -> Result<()> {
-        write_tree(&self.paths, &self.tree)?;
-        Ok(())
+    fn flush(&mut self) -> Result<()> {
+        let result = write_tree(&self.paths, &self.tree);
+
+        if result.is_err() {
+            self.cache.invalidate_all();
+        }
+        self.cache.flush()?;
+
+        result
     }
 
     fn overwrite_versioned_file_with_version(&self, version_id: VersionId) -> Result<()> {
@@ -549,6 +543,7 @@ impl Session {
         let mut chain = self
             .tree
             .version_and_ancestors(version_id)
+            .expect("version_id was invalid")
             .map(|v| (v, self.cache.get(v.id)))
             .take_while_inclusive(|(v, cache)| v.content_blob_kind.is_patch() && cache.is_none())
             .collect_vec();
@@ -625,83 +620,83 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        // In case file descriptor got shared with a child process
+        // Explicit unlock in case file descriptor got shared with a child process
         let _ = self.lock.unlock();
     }
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum CommitResult {
     Ok,
     NoUncommittedChanges,
     HeadMustBeOnBranch,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum CheckOutBranchResult {
     Ok,
     HasUncommittedChanges,
     BranchNotFound,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum CheckOutVersionResult {
     Ok,
     HasUncommittedChanges,
     VersionNotFound,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum UpdateDescriptionResult {
     Ok,
     VersionNotFound,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum RestoreVersionResult {
     Ok,
     WouldOverwriteUncommittedChanges,
     VersionNotFound,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum SoftResetResult {
     Ok(CleanupResult),
+    HeadBranchTipIsAlreadyThere,
     HeadMustBeBranch,
-    InvalidResetRange,
-    ResetRangeOverlapsWithOtherBranches,
+    InvalidStopAtVersionId,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum AmendResult {
     Ok(CleanupResult),
     NoUncommittedChanges,
     HeadMustBeBranch,
-    CannotAmendVersionBelongingToAnotherBranch,
+    CannotAmendRootWhenOtherBranchesExist,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum CreateBranchResult {
     Ok,
     AlreadyExists,
     InvalidBranchTipId,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum RenameBranchResult {
     Ok,
     NewNameAlreadyExists,
-    OldBranchNotFound,
+    OldNameNotFound,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
-pub enum DeleteBranchResult {
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
+pub enum RemoveBranchResult {
     Ok(CleanupResult),
     BranchNotFound,
-    CannotDeleteHead,
+    CannotRemoveHeadBranch,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum CleanupResult {
     Ok,
     Failed,

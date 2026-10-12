@@ -1,15 +1,16 @@
 use crate::error::{Error, Result, Severity};
 use biver_core::repository::{Session, TryStartSessionResult};
 
-pub trait OkExt {
+pub trait ResultExt {
     type Value;
-    fn ok(self) -> Result<Self::Value>;
+
+    fn result(self) -> Result<Self::Value>;
 }
 
-impl OkExt for TryStartSessionResult {
+impl ResultExt for TryStartSessionResult {
     type Value = Session;
 
-    fn ok(self) -> Result<Session> {
+    fn result(self) -> Result<Session> {
         match self {
             TryStartSessionResult::Ok(session) => Ok(session),
             TryStartSessionResult::NotInitialized => Err(Error {

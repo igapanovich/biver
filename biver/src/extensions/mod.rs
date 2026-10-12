@@ -1,3 +1,3 @@
-mod ok_ext;
+mod result_ext;
 
-pub use ok_ext::OkExt;
+pub use result_ext::ResultExt;

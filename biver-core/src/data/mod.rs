@@ -1,7 +1,7 @@
 mod branch_name;
 mod content_blob_kind;
 mod head;
-mod tree;
+pub(crate) mod tree;
 mod version;
 mod version_id;
 

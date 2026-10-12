@@ -1,17 +1,16 @@
 use crate::cache::Cache;
-use crate::data::{BranchName, ContentBlobKind, Head, Tree, Version, VersionId};
+use crate::data::tree::NewVersion;
+use crate::data::{BranchName, ContentBlobKind, Tree};
 use crate::error::Result;
-use crate::repository::common::maybe_store_preview;
-use crate::utilities::{hash, nickname};
+use crate::repository::common::versioned_file_meta;
+use crate::utilities::external_preview_command::create_preview;
 use crate::{Configuration, Error};
 use chrono::Utc;
-use derive_more::IsVariant;
 pub use paths::RepositoryPaths;
 pub use session::*;
-use std::collections::HashMap;
 use std::fs;
-use std::fs::File;
 use std::path::Path;
+use variantly::Variantly;
 
 mod common;
 mod paths;
@@ -20,7 +19,7 @@ mod session;
 
 const SCHEMA_VERSION: u32 = 1;
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Variantly)]
 pub enum TryStartSessionResult {
     Ok(Session),
     NotInitialized,
@@ -48,7 +47,7 @@ pub fn try_start_session(versioned_file_path: &Path) -> Result<TryStartSessionRe
     Ok(TryStartSessionResult::Ok(session))
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Variantly)]
 pub enum InitializeResult {
     Ok,
     AlreadyInitialized,
@@ -57,7 +56,7 @@ pub enum InitializeResult {
 pub fn initialize(
     config: Configuration,
     versioned_file_path: &Path,
-    branch: Option<BranchName>,
+    branch_name: Option<BranchName>,
     description: String,
 ) -> Result<InitializeResult> {
     let paths = RepositoryPaths::new(versioned_file_path);
@@ -77,36 +76,35 @@ pub fn initialize(
     let config_str = toml::ser::to_string(&config)?;
     fs::write(paths.config_file(), config_str)?;
 
-    let versioned_file_xxh3_128 = hash::xxh3_128(File::open(&paths.versioned_file())?)?;
-    let versioned_file_length = fs::metadata(&paths.versioned_file())?.len();
+    let versioned_file_meta = versioned_file_meta(&paths)?;
 
-    let new_version_id = VersionId::new();
+    let preview_command = config.preview_command;
 
-    let branch = branch.unwrap_or_default();
+    let tree = Tree::new(
+        branch_name.unwrap_or_else(default_initial_branch_name),
+        NewVersion {
+            creation_time: Utc::now(),
+            versioned_file_length: versioned_file_meta.length,
+            versioned_file_xxh3_128: versioned_file_meta.xxh3_128,
+            description,
+            content_blob_kind: ContentBlobKind::Full,
+            has_preview: preview_command.is_some(),
+        },
+    );
 
-    let content_blob_file_path = paths.version_content_blob_file(new_version_id);
+    let root_id = tree.head_version_id();
 
-    let has_preview = maybe_store_preview(&config, &paths, new_version_id)?;
-
-    let new_version = Version {
-        id: new_version_id,
-        creation_time: Utc::now(),
-        nickname: nickname::new_nickname(versioned_file_xxh3_128),
-        versioned_file_length,
-        versioned_file_xxh3_128,
-        description,
-        parent: None,
-        content_blob_kind: ContentBlobKind::Full,
-        has_preview,
-    };
-
-    let tree = Tree {
-        head: Head::Branch(branch.clone()),
-        branches: HashMap::from([(branch, new_version_id)]),
-        versions: vec![new_version],
-    };
-
+    let content_blob_file_path = paths.version_content_blob_file(root_id);
     fs::copy(&paths.versioned_file(), &content_blob_file_path)?;
+
+    if let Some(preview_command) = preview_command {
+        create_preview(
+            &preview_command,
+            &paths.versioned_file(),
+            &paths.version_preview_file(root_id),
+        )?;
+    }
+
     common::write_tree(&paths, &tree)?;
 
     Ok(InitializeResult::Ok)
@@ -136,4 +134,8 @@ fn validate_schema_version(paths: &RepositoryPaths) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn default_initial_branch_name() -> BranchName {
+    BranchName::new("main".to_string()).unwrap()
 }
