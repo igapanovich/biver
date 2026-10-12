@@ -623,41 +623,41 @@ impl Session {
     }
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum CommitResult {
     Ok,
     NoUncommittedChanges,
     HeadMustBeOnBranch,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum CheckOutBranchResult {
     Ok,
     HasUncommittedChanges,
     BranchNotFound,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum CheckOutVersionResult {
     Ok,
     HasUncommittedChanges,
     VersionNotFound,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum UpdateDescriptionResult {
     Ok,
     VersionNotFound,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum RestoreVersionResult {
     Ok,
     WouldOverwriteUncommittedChanges,
     VersionNotFound,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum SoftResetResult {
     Ok(CleanupResult),
     HeadMustBeBranch,
@@ -665,7 +665,7 @@ pub enum SoftResetResult {
     ResetRangeOverlapsWithOtherBranches,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum AmendResult {
     Ok(CleanupResult),
     NoUncommittedChanges,
@@ -673,28 +673,28 @@ pub enum AmendResult {
     CannotAmendVersionBelongingToAnotherBranch,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum CreateBranchResult {
     Ok,
     AlreadyExists,
     InvalidBranchTipId,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum RenameBranchResult {
     Ok,
     NewNameAlreadyExists,
     OldBranchNotFound,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum DeleteBranchResult {
     Ok(CleanupResult),
     BranchNotFound,
     CannotDeleteHead,
 }
 
-#[derive(Debug, IsVariant)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, IsVariant)]
 pub enum CleanupResult {
     Ok,
     Failed,

@@ -24,8 +24,9 @@ proptest! {
 
         prop_assert!(result.is_ok(), "create_branch succeeds if branch name and branch tip ID are valid");
 
-        prop_assert_eq!(&before.versions, &after.versions, "successful create_branch does not modify versions");
         prop_assert_eq!(&before.head, &after.head, "successful create_branch does not modify head");
+        prop_assert_eq!(&before.versions, &after.versions, "successful create_branch does not modify versions");
+        prop_assert_eq!(&before.versioned_file_content, &after.versioned_file_content, "successful create_branch does not modify versioned file");
 
         let diff = Snapshot::diff(&before, &after);
 

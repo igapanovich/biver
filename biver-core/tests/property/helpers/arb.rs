@@ -140,12 +140,7 @@ fn head_branch_blueprint() -> impl Strategy<Value = HeadBlueprint> {
 }
 
 fn head_version_blueprint() -> impl Strategy<Value = HeadBlueprint> {
-    (any::<Index>(), any::<Index>()).prop_map(|(branch_index, version_in_branch_index)| {
-        HeadBlueprint::Version {
-            branch_index,
-            version_in_branch_index,
-        }
-    })
+    version_path().prop_map(HeadBlueprint::Version)
 }
 
 fn initial_branch_blueprint() -> impl Strategy<Value = InitialBranchBlueprint> {

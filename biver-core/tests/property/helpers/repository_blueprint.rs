@@ -1,13 +1,15 @@
 use crate::helpers::extensions::{BiverResultUnwrap, IndexExt, UnwrapExt};
 use crate::helpers::file_operation::{FileOperation, FileOperations};
+use crate::helpers::version_path::{ResolveVersionPathExt, VersionPath};
 use biver_core::data::BranchName;
 use biver_core::repository::{CommitResult, CreateBranchResult, Session};
 use biver_core::{Configuration, repository};
 use itertools::Itertools;
 use proptest::sample::Index;
+use std::fmt::Debug;
+use std::iter;
 use std::path::Path;
 
-#[derive(Debug)]
 pub struct RepositoryBlueprint {
     pub initial_branch: InitialBranchBlueprint,
     pub other_branches: Vec<BranchBlueprint>,
@@ -15,33 +17,85 @@ pub struct RepositoryBlueprint {
     pub uncommitted_changes: Option<Vec<FileOperation>>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum HeadBlueprint {
-    Branch(Index),
-    Version {
-        branch_index: Index,
-        version_in_branch_index: Index,
-    },
+impl Debug for RepositoryBlueprint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "(")?;
+        writeln!(f, "  Uncommitted: {:?}", self.uncommitted_changes)?;
+        writeln!(f, "  Head: {:?}", self.head)?;
+        writeln!(f, "  Branches:")?;
+        writeln!(f, "    {:?}", self.initial_branch)?;
+        for b in &self.other_branches {
+            writeln!(f, "    {:?}", b)?;
+        }
+        write!(f, ")")?;
+        Ok(())
+    }
 }
 
-#[derive(Debug)]
+#[derive(Clone)]
+pub enum HeadBlueprint {
+    Branch(Index),
+    Version(VersionPath),
+}
+
+impl Debug for HeadBlueprint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HeadBlueprint::Branch(index) => write!(f, "Branch({})", index.debug_fraction()),
+            HeadBlueprint::Version(path) => write!(f, "Version({:?})", path),
+        }
+    }
+}
+
 pub struct InitialBranchBlueprint {
     pub name: Option<BranchName>,
     pub first_version: VersionBlueprint,
     pub following_versions: Vec<VersionBlueprint>,
 }
 
-#[derive(Debug)]
+impl Debug for InitialBranchBlueprint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = self
+            .name
+            .as_ref()
+            .map(|n| n.to_string())
+            .unwrap_or(String::new());
+
+        let versions = iter::once(&self.first_version)
+            .chain(self.following_versions.iter())
+            .collect_vec();
+
+        write!(f, "Initial Name({}) {:?}", name, versions)
+    }
+}
+
 pub struct BranchBlueprint {
     pub diverge_at: Index,
     pub name: BranchName,
     pub versions: Vec<VersionBlueprint>,
 }
 
-#[derive(Debug)]
+impl Debug for BranchBlueprint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Diverge({}) Name({}) {:?}",
+            self.diverge_at.debug_fraction(),
+            self.name.as_str(),
+            self.versions
+        )
+    }
+}
+
 pub struct VersionBlueprint {
     pub changes: Vec<FileOperation>,
     pub description: String,
+}
+
+impl Debug for VersionBlueprint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}:{:?})", &self.description, &self.changes)
+    }
 }
 
 impl InitialBranchBlueprint {
@@ -127,7 +181,7 @@ impl RepositoryBlueprint {
             b.build(&mut session, &versioned_file_path);
         }
 
-        match self.head {
+        match &self.head {
             HeadBlueprint::Branch(index) => {
                 let branches = session.tree().branch_names().sorted().collect_vec();
                 let branch_name = index.get_copied(&branches);
@@ -136,22 +190,9 @@ impl RepositoryBlueprint {
                     .unwrap()
                     .unwrap();
             }
-            HeadBlueprint::Version {
-                branch_index,
-                version_in_branch_index,
-            } => {
-                let branches = session.tree().branch_names().sorted().collect_vec();
-                let branch_name = branch_index.get_copied(&branches);
-                let branch_tip_id = session.tree().branch_tip_ids()[branch_name];
-                let branch_versions = session
-                    .tree()
-                    .version_and_ancestors(branch_tip_id)
-                    .collect_vec();
-                let checkout_version = version_in_branch_index.get_copied(&branch_versions);
-                session
-                    .check_out_version(checkout_version.id)
-                    .unwrap()
-                    .unwrap();
+            HeadBlueprint::Version(path) => {
+                let version_id = session.tree().resolve_version_path(path).id;
+                session.check_out_version(version_id).unwrap().unwrap();
             }
         }
 
