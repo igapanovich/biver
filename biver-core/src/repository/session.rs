@@ -440,15 +440,15 @@ impl Session {
 
     pub fn rename_branch(
         &mut self,
-        old_branch_name: BranchName,
+        old_branch_name: &BranchName,
         new_branch_name: BranchName,
     ) -> Result<RenameBranchResult> {
         use_break!(self, {
-            if old_branch_name == new_branch_name {
+            if *old_branch_name == new_branch_name {
                 return Ok(RenameBranchResult::Ok);
             }
 
-            if let Err(err) = self.tree.rename_branch(&old_branch_name, new_branch_name) {
+            if let Err(err) = self.tree.rename_branch(old_branch_name, new_branch_name) {
                 return match err {
                     RenameBranchError::NewNameAlreadyExists => {
                         Ok(RenameBranchResult::NewNameAlreadyExists)

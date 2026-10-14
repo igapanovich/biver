@@ -1,4 +1,5 @@
 use crate::helpers::arb;
+use crate::helpers::arb::TestEnvOption::AtLeastTwoBranches;
 use crate::helpers::diff::Diff;
 use crate::helpers::extensions::IndexExt;
 use crate::helpers::snapshot::Snapshot;
@@ -17,7 +18,7 @@ proptest! {
 
         let before = env.snapshot(&session);
 
-        let result = session.rename_branch(old_branch_name.clone(), new_branch_name.clone())?;
+        let result = session.rename_branch(&old_branch_name, new_branch_name.clone())?;
 
         let after = env.snapshot(&session);
 
@@ -40,17 +41,17 @@ proptest! {
     }
 
     #[test]
-    fn rename_branch_new_name_already_exists_properties(env in arb::env(), old_branch_index in any::<Index>(), new_branch_index in any::<Index>()) {
+    fn rename_branch_new_name_already_exists_properties(env in arb::env_with_opts(&[AtLeastTwoBranches]), old_branch_index in any::<Index>(), new_branch_index in any::<Index>()) {
         let mut session = env.start_session();
 
-        let new_branch_name = new_branch_index.get_copied(&session.tree().branch_names().collect_vec()).clone();
-        let old_branch_name = old_branch_index.get_copied(&session.tree().branch_names().collect_vec()).clone();
-
-        prop_assume!(new_branch_name != old_branch_name);
+        let mut branch_names = session.tree().branch_names().collect_vec();
+        let old_branch_index = old_branch_index.index(branch_names.len());
+        let old_branch_name = branch_names.remove(old_branch_index).clone();
+        let new_branch_name = new_branch_index.get_copied(&branch_names).clone();
 
         let before = env.snapshot(&session);
 
-        let result = session.rename_branch(old_branch_name, new_branch_name)?;
+        let result = session.rename_branch(&old_branch_name, new_branch_name)?;
 
         let after = env.snapshot(&session);
 
@@ -68,7 +69,7 @@ proptest! {
 
         let before = env.snapshot(&session);
 
-        let result = session.rename_branch(old_branch_name, new_branch_name)?;
+        let result = session.rename_branch(&old_branch_name, new_branch_name)?;
 
         let after = env.snapshot(&session);
 

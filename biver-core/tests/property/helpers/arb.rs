@@ -22,6 +22,7 @@ pub enum TestEnvOption {
     NoUncommittedChanges,
     HeadOnBranch,
     HeadOnVersion,
+    AtLeastTwoBranches,
 }
 
 pub fn env_with_opts(options: &[TestEnvOption]) -> impl Strategy<Value = TestEnv> {
@@ -112,9 +113,15 @@ fn repository_blueprint(options: &[TestEnvOption]) -> impl Strategy<Value = Repo
         option::of(vec(file_operation(), 1..=4)).boxed()
     };
 
+    let other_branches = if options.contains(&TestEnvOption::AtLeastTwoBranches) {
+        vec(branch_blueprint(), 1..=4)
+    } else {
+        vec(branch_blueprint(), 0..=4)
+    };
+
     (
         initial_branch_blueprint(),
-        vec(branch_blueprint(), 0..=4),
+        other_branches,
         head,
         uncommitted_changes,
     )

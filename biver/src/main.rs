@@ -360,7 +360,7 @@ fn run_command(command: Command) -> Result<()> {
 
                 let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
-                let result = session.rename_branch(old_name, new_name)?;
+                let result = session.rename_branch(&old_name, new_name)?;
 
                 match result {
                     RenameBranchResult::Ok => success_ok(),
