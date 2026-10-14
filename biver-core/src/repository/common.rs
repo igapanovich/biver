@@ -22,17 +22,17 @@ pub fn write_tree(paths: &RepositoryPaths, tree: &Tree) -> Result<()> {
     rotate_backup(&backup1, &backup2, Duration::from_mins(5))?;
     rotate_backup(paths.tree_file(), &backup1, Duration::from_secs(10))?;
 
-    let tree_content = serde_json::to_string_pretty(tree)?;
-    let tree_tmp = paths.tree_file().with_extension(".tmp");
+    let using_tmp = fs::exists(paths.tree_file())?;
+    let tree_tmp_path = paths.tree_file().with_extension(".tmp");
 
-    if fs::exists(paths.tree_file())? {
-        fs::rename(paths.tree_file(), &tree_tmp)?;
+    if using_tmp {
+        fs::rename(paths.tree_file(), &tree_tmp_path)?;
     }
 
-    fs::write(paths.tree_file(), tree_content)?;
+    ciborium::ser::into_writer(&tree, File::create(paths.tree_file())?)?;
 
-    if fs::exists(&tree_tmp)? {
-        fs::remove_file(tree_tmp)?;
+    if using_tmp {
+        fs::remove_file(tree_tmp_path)?;
     }
 
     Ok(())

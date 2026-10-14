@@ -8,8 +8,11 @@ pub enum Error {
     #[error("{0}")]
     GetProjectDirs(#[from] biver_directories::GetProjectDirsError),
 
-    #[error("json deserialization error: {0}")]
-    JsonDeserialization(#[from] serde_json::Error),
+    #[error("cbor serialization error: {0}")]
+    CborSerialization(#[from] ciborium::ser::Error<std::io::Error>),
+
+    #[error("cbor deserialization error: {0}")]
+    CborDeserialization(#[from] ciborium::de::Error<std::io::Error>),
 
     #[error("toml serialization error: {0}")]
     TomlSerialization(#[from] toml::ser::Error),

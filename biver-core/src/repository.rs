@@ -9,6 +9,7 @@ use chrono::Utc;
 pub use paths::RepositoryPaths;
 pub use session::*;
 use std::fs;
+use std::fs::File;
 use std::path::Path;
 use variantly::Variantly;
 
@@ -34,8 +35,7 @@ pub fn try_start_session(versioned_file_path: &Path) -> Result<TryStartSessionRe
 
     validate_schema_version(&paths)?;
 
-    let tree_str = fs::read(paths.tree_file())?;
-    let tree = serde_json::from_slice(&tree_str)?;
+    let tree = ciborium::de::from_reader(File::open(paths.tree_file())?)?;
 
     let cache = Cache::read(&paths)?;
 
