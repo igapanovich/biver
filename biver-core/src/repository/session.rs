@@ -1,4 +1,3 @@
-use crate::cache::Cache;
 use crate::data::tree::{
     AddBranchError, MoveHeadToBranchError, MoveHeadToVersionError, NewVersion,
     OverwriteBranchTipError, OverwriteBranchTipOutcome, PopBranchOutcome, RemoveBranchError,
@@ -6,7 +5,8 @@ use crate::data::tree::{
 };
 use crate::data::{BranchName, ContentBlobKind, Tree, Version, VersionId};
 use crate::error::Result;
-use crate::repository::common::{versioned_file_meta, write_tree};
+use crate::repository::common;
+use crate::repository::common::versioned_file_meta;
 use crate::repository::paths::RepositoryPaths;
 use crate::repository::preview::Preview;
 use crate::utilities::external_preview_command::create_preview;
@@ -50,8 +50,6 @@ pub struct Session {
     config: Configuration,
     paths: RepositoryPaths,
     tree: Tree,
-    cache: Cache,
-    cache_enabled: bool,
     broken: bool,
     lock: File,
 }
@@ -61,7 +59,6 @@ impl Session {
         config: Configuration,
         paths: RepositoryPaths,
         tree: Tree,
-        cache: Cache,
     ) -> Result<Session> {
         let lock = OpenOptions::new()
             .read(true)
@@ -80,8 +77,6 @@ impl Session {
             config,
             paths,
             tree,
-            cache,
-            cache_enabled: true,
             lock,
             broken: false,
         };
@@ -158,10 +153,7 @@ impl Session {
                 )?;
             }
 
-            self.cache
-                .set_branch_tip(head_branch, new_version_id, self.paths.versioned_file())?;
-
-            self.flush()?;
+            self.flush_tree()?;
 
             Ok(CommitResult::Ok)
         })
@@ -243,13 +235,7 @@ impl Session {
                 }
             }
 
-            self.cache.set_branch_tip(
-                head_branch,
-                new_version_id,
-                &self.paths.versioned_file().to_path_buf(),
-            )?;
-
-            self.flush()?;
+            self.flush_tree()?;
 
             let cleanup_result = if let Some(removed_version) = removed_version {
                 self.cleanup_erased_version_blobs([removed_version])
@@ -284,14 +270,9 @@ impl Session {
 
             if !has_uncommitted_changes {
                 self.overwrite_versioned_file_with_version(new_head_version_id)?;
-                self.cache.set_branch_tip(
-                    branch,
-                    new_head_version_id,
-                    self.paths.versioned_file(),
-                )?;
             }
 
-            self.flush()?;
+            self.flush_tree()?;
 
             Ok(CheckOutBranchResult::Ok)
         })
@@ -313,7 +294,7 @@ impl Session {
                 self.overwrite_versioned_file_with_version(version_id)?;
             }
 
-            self.flush()?;
+            self.flush_tree()?;
 
             Ok(CheckOutVersionResult::Ok)
         })
@@ -336,7 +317,7 @@ impl Session {
                 return Ok(UpdateDescriptionResult::VersionNotFound);
             }
 
-            self.flush()?;
+            self.flush_tree()?;
 
             Ok(UpdateDescriptionResult::Ok)
         })
@@ -414,9 +395,7 @@ impl Session {
                 }
             }
 
-            self.cache.invalidate_branch_tip(&head_branch);
-
-            self.flush()?;
+            self.flush_tree()?;
 
             let cleanup_result = self.cleanup_erased_version_blobs(removed_versions);
 
@@ -437,7 +416,7 @@ impl Session {
                 };
             }
 
-            self.flush()?;
+            self.flush_tree()?;
 
             Ok(CreateBranchResult::Ok)
         })
@@ -462,7 +441,7 @@ impl Session {
                 };
             }
 
-            self.flush()?;
+            self.flush_tree()?;
 
             Ok(RenameBranchResult::Ok)
         })
@@ -485,7 +464,7 @@ impl Session {
                 }
             };
 
-            self.flush()?;
+            self.flush_tree()?;
 
             let cleanup_result = self.cleanup_erased_version_blobs(removed_versions);
 
@@ -530,23 +509,9 @@ impl Session {
         Ok(Some(Preview::new(temp)?.with_cleanup()))
     }
 
-    pub fn cache_enabled(&self) -> bool {
-        self.cache_enabled
-    }
-
-    pub fn set_cache_enabled(&mut self, enabled: bool) {
-        self.cache_enabled = enabled;
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        let result = write_tree(&self.paths, &self.tree);
-
-        if result.is_err() {
-            self.cache.invalidate_all();
-        }
-        self.cache.flush()?;
-
-        result
+    fn flush_tree(&self) -> Result<()> {
+        common::write_tree(&self.paths, &self.tree)?;
+        Ok(())
     }
 
     fn overwrite_versioned_file_with_version(&self, version_id: VersionId) -> Result<()> {
@@ -559,29 +524,17 @@ impl Session {
             .tree
             .version_and_ancestors(version_id)
             .expect("version_id was invalid")
-            .map(|v| {
-                let cached = if self.cache_enabled {
-                    self.cache.get(v.id)
-                } else {
-                    None
-                };
-                (v, cached)
-            })
-            .take_while_inclusive(|(v, cache)| v.content_blob_kind.is_patch() && cache.is_none())
+            .take_while_inclusive(|v| v.content_blob_kind.is_patch())
             .collect_vec();
 
         assert!(!chain.is_empty());
 
         chain.reverse();
 
-        let (starting_version, cache) = &chain[0];
+        let starting_version = &chain[0];
 
-        let full_blob = if let Some(cache) = cache {
-            cache
-        } else {
-            assert!(starting_version.content_blob_kind.is_full());
-            &self.paths.version_content_blob_file(starting_version.id)
-        };
+        assert!(starting_version.content_blob_kind.is_full());
+        let full_blob = &self.paths.version_content_blob_file(starting_version.id);
 
         let a = temp_file::new_path();
         let b = temp_file::new_path();
@@ -596,7 +549,7 @@ impl Session {
             fs::copy(&full_blob, actual)?;
         }
 
-        for (version, _) in chain.iter().skip(1) {
+        for version in chain.iter().skip(1) {
             assert!(version.content_blob_kind.is_patch());
 
             let patch = self.paths.version_content_blob_file(version.id);

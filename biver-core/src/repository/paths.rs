@@ -15,8 +15,6 @@ pub struct RepositoryPaths {
     tree_backup3_file: PathBuf,
     tree_backup4_file: PathBuf,
     tree_backup5_file: PathBuf,
-    cache_data_file: PathBuf,
-    cache_dir: PathBuf,
     config_file: PathBuf,
     schema_version: PathBuf,
     lock_file: PathBuf,
@@ -38,8 +36,6 @@ impl RepositoryPaths {
             tree_backup4_file: backup_dir.join("tree_backup4"),
             tree_backup5_file: backup_dir.join("tree_backup5"),
             backup_dir,
-            cache_dir: repository_dir.join("cache"),
-            cache_data_file: repository_dir.join("cache.json"),
             config_file: repository_dir.join("config.toml"),
             schema_version: repository_dir.join("schema_version"),
             lock_file: repository_dir.join("lock"),
@@ -109,18 +105,6 @@ impl RepositoryPaths {
 
     pub fn version_preview_file(&self, version_id: VersionId) -> PathBuf {
         self.preview_dir.join(version_id_file_name(version_id))
-    }
-
-    pub fn cache_data_file(&self) -> &Path {
-        &self.cache_data_file
-    }
-
-    pub fn cache_dir(&self) -> &Path {
-        &self.cache_dir
-    }
-
-    pub fn version_content_cache_file(&self, version_id: VersionId) -> PathBuf {
-        self.cache_dir.join(version_id_file_name(version_id))
     }
 }
 

@@ -4,8 +4,6 @@ use proptest::prelude::TestCaseError;
 use proptest::{prop_assert, prop_assert_eq};
 
 pub fn assert_version_content_integrity(mut session: Session) -> Result<(), TestCaseError> {
-    session.set_cache_enabled(false);
-
     session.discard()?;
 
     let version_ids = session.tree().versions().map(|v| v.id).collect_vec();

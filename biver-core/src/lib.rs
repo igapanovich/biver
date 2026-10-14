@@ -1,4 +1,3 @@
-mod cache;
 mod configuration;
 pub mod data;
 mod error;

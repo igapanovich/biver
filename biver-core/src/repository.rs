@@ -1,4 +1,3 @@
-use crate::cache::Cache;
 use crate::data::tree::NewVersion;
 use crate::data::{BranchName, ContentBlobKind, Tree};
 use crate::error::Result;
@@ -37,12 +36,10 @@ pub fn try_start_session(versioned_file_path: &Path) -> Result<TryStartSessionRe
 
     let tree = ciborium::de::from_reader(File::open(paths.tree_file())?)?;
 
-    let cache = Cache::read(&paths)?;
-
     let config_str = fs::read(paths.config_file())?;
     let config = toml::de::from_slice(&config_str)?;
 
-    let session = Session::new(config, paths, tree, cache)?;
+    let session = Session::new(config, paths, tree)?;
 
     Ok(TryStartSessionResult::Ok(session))
 }
@@ -69,7 +66,6 @@ pub fn initialize(
     fs::create_dir_all(paths.content_blob_dir())?;
     fs::create_dir_all(paths.preview_dir())?;
     fs::create_dir_all(paths.backup_dir())?;
-    fs::create_dir_all(paths.cache_dir())?;
 
     fs::write(paths.schema_version_file(), SCHEMA_VERSION.to_string())?;
 
