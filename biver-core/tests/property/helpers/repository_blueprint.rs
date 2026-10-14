@@ -69,6 +69,7 @@ impl Debug for InitialBranchBlueprint {
     }
 }
 
+#[derive(Clone)]
 pub struct BranchBlueprint {
     pub diverge_at: Index,
     pub name: BranchName,
@@ -87,6 +88,7 @@ impl Debug for BranchBlueprint {
     }
 }
 
+#[derive(Clone)]
 pub struct VersionBlueprint {
     pub changes: Vec<FileOperation>,
     pub description: String,

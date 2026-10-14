@@ -23,6 +23,7 @@ pub enum TestEnvOption {
     HeadOnBranch,
     HeadOnVersion,
     AtLeastTwoBranches,
+    SingleBranch,
 }
 
 pub fn env_with_opts(options: &[TestEnvOption]) -> impl Strategy<Value = TestEnv> {
@@ -114,9 +115,11 @@ fn repository_blueprint(options: &[TestEnvOption]) -> impl Strategy<Value = Repo
     };
 
     let other_branches = if options.contains(&TestEnvOption::AtLeastTwoBranches) {
-        vec(branch_blueprint(), 1..=4)
+        vec(branch_blueprint(), 1..=4).boxed()
+    } else if options.contains(&TestEnvOption::SingleBranch) {
+        Just(Vec::new()).boxed()
     } else {
-        vec(branch_blueprint(), 0..=4)
+        vec(branch_blueprint(), 0..=4).boxed()
     };
 
     (

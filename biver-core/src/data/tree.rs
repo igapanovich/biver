@@ -467,15 +467,24 @@ impl Tree {
             return Err(RemoveBranchError::BranchNotFound);
         }
 
-        if self.head.branch_ref() == Some(branch_name) {
-            return Err(RemoveBranchError::CannotRemoveHeadBranch);
-        }
-
         let version_ids_to_remove = self
             .branch_tip_and_ancestors_exclusive(branch_name)
             .expect("Should not be None for a valid branch")
             .map(|v| v.id)
             .collect_vec();
+
+        match &self.head {
+            Head::Branch(b) => {
+                if b == branch_name {
+                    return Err(RemoveBranchError::CannotRemoveHeadBranch);
+                }
+            }
+            Head::Version(id) => {
+                if version_ids_to_remove.contains(id) {
+                    return Err(RemoveBranchError::CannotRemoveHeadVersion);
+                }
+            }
+        }
 
         let indexes_to_remove = self
             .versions
@@ -492,7 +501,7 @@ impl Tree {
 
         let mut removed_versions = Vec::with_capacity(indexes_to_remove.len());
 
-        for index in indexes_to_remove {
+        for index in indexes_to_remove.into_iter().rev() {
             removed_versions.push(self.versions.remove(index));
         }
 
@@ -574,6 +583,7 @@ pub struct RemoveBranchOutcome {
 pub enum RemoveBranchError {
     BranchNotFound,
     CannotRemoveHeadBranch,
+    CannotRemoveHeadVersion,
 }
 
 pub struct NewVersion {
@@ -646,6 +656,7 @@ impl<'a> Iterator for BranchTipAndAncestorsExclusive<'a> {
         }
 
         self.at_branch_tip = false;
+        self.current_version_id = current_version.parent;
 
         Some(current_version)
     }

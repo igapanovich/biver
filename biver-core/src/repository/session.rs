@@ -4,7 +4,7 @@ use crate::data::tree::{
     OverwriteBranchTipError, OverwriteBranchTipOutcome, PopBranchOutcome, RemoveBranchError,
     RenameBranchError, VersionUpdate,
 };
-use crate::data::{BranchName, ContentBlobKind, Tree, VersionId};
+use crate::data::{BranchName, ContentBlobKind, Tree, Version, VersionId};
 use crate::error::Result;
 use crate::repository::common::{versioned_file_meta, write_tree};
 use crate::repository::paths::RepositoryPaths;
@@ -205,7 +205,7 @@ impl Session {
                         has_preview: preview_command.is_some(),
                     });
 
-            let (new_version_id, removed_version_id) = match overwrite_result {
+            let (new_version_id, removed_version) = match overwrite_result {
                 Ok(ok) => match ok {
                     OverwriteBranchTipOutcome::OverwrittenVersionStillInUse {
                         new_tip_id, ..
@@ -213,7 +213,7 @@ impl Session {
                     OverwriteBranchTipOutcome::OverwrittenVersionRemoved {
                         former_tip,
                         new_tip_id,
-                    } => (new_tip_id, Some(former_tip.id)),
+                    } => (new_tip_id, Some(former_tip)),
                 },
                 Err(err) => match err {
                     OverwriteBranchTipError::BranchNotFound => panic!("Head branch not found"),
@@ -249,8 +249,8 @@ impl Session {
 
             self.flush()?;
 
-            let cleanup_result = if let Some(removed_version_id) = removed_version_id {
-                self.cleanup_erased_version_blobs([removed_version_id])
+            let cleanup_result = if let Some(removed_version) = removed_version {
+                self.cleanup_erased_version_blobs([removed_version])
             } else {
                 CleanupResult::Ok
             };
@@ -268,9 +268,7 @@ impl Session {
 
     pub fn check_out_branch(&mut self, branch: BranchName) -> Result<CheckOutBranchResult> {
         use_break!(self, {
-            if self.has_uncommitted_changes()? {
-                return Ok(CheckOutBranchResult::HasUncommittedChanges);
-            }
+            let has_uncommitted_changes = self.has_uncommitted_changes()?;
 
             if let Err(err) = self.tree.move_head_to_branch(branch.clone()) {
                 return match err {
@@ -282,9 +280,14 @@ impl Session {
 
             let new_head_version_id = self.tree.head_version_id();
 
-            self.overwrite_versioned_file_with_version(new_head_version_id)?;
-            self.cache
-                .set_branch_tip(branch, new_head_version_id, self.paths.versioned_file())?;
+            if !has_uncommitted_changes {
+                self.overwrite_versioned_file_with_version(new_head_version_id)?;
+                self.cache.set_branch_tip(
+                    branch,
+                    new_head_version_id,
+                    self.paths.versioned_file(),
+                )?;
+            }
 
             self.flush()?;
 
@@ -294,9 +297,7 @@ impl Session {
 
     pub fn check_out_version(&mut self, version_id: VersionId) -> Result<CheckOutVersionResult> {
         use_break!(self, {
-            if self.has_uncommitted_changes()? {
-                return Ok(CheckOutVersionResult::HasUncommittedChanges);
-            }
+            let has_uncommitted_changes = self.has_uncommitted_changes()?;
 
             if let Err(err) = self.tree.move_head_to_version(version_id) {
                 return match err {
@@ -306,7 +307,9 @@ impl Session {
                 };
             };
 
-            self.overwrite_versioned_file_with_version(version_id)?;
+            if !has_uncommitted_changes {
+                self.overwrite_versioned_file_with_version(version_id)?;
+            }
 
             self.flush()?;
 
@@ -385,7 +388,7 @@ impl Session {
                 return Ok(SoftResetResult::HeadBranchTipIsAlreadyThere);
             }
 
-            let mut removed_version_ids = Vec::new();
+            let mut removed_versions = Vec::new();
 
             loop {
                 let pop_ok = self
@@ -399,7 +402,7 @@ impl Session {
                         new_tip_id,
                         former_tip,
                     } => {
-                        removed_version_ids.push(former_tip.id);
+                        removed_versions.push(former_tip);
                         new_tip_id
                     }
                 };
@@ -413,7 +416,7 @@ impl Session {
 
             self.flush()?;
 
-            let cleanup_result = self.cleanup_erased_version_blobs(removed_version_ids);
+            let cleanup_result = self.cleanup_erased_version_blobs(removed_versions);
 
             Ok(SoftResetResult::Ok(cleanup_result))
         })
@@ -473,14 +476,16 @@ impl Session {
                         RemoveBranchError::CannotRemoveHeadBranch => {
                             Ok(RemoveBranchResult::CannotRemoveHeadBranch)
                         }
+                        RemoveBranchError::CannotRemoveHeadVersion => {
+                            Ok(RemoveBranchResult::CannotRemoveHeadVersion)
+                        }
                     };
                 }
             };
 
             self.flush()?;
 
-            let cleanup_result =
-                self.cleanup_erased_version_blobs(removed_versions.iter().map(|v| v.id));
+            let cleanup_result = self.cleanup_erased_version_blobs(removed_versions);
 
             Ok(RemoveBranchResult::Ok(cleanup_result))
         })
@@ -602,15 +607,19 @@ impl Session {
 
     fn cleanup_erased_version_blobs(
         &self,
-        version_ids: impl IntoIterator<Item = VersionId>,
+        versions: impl IntoIterator<Item = Version>,
     ) -> CleanupResult {
         let mut cleanup_result = CleanupResult::Ok;
 
-        for id in version_ids.into_iter() {
-            if fs::remove_file(self.paths.version_content_blob_file(id)).is_err()
-                || fs::remove_file(self.paths.version_preview_file(id)).is_err()
-            {
+        for version in versions.into_iter() {
+            if fs::remove_file(self.paths.version_content_blob_file(version.id)).is_err() {
                 cleanup_result = CleanupResult::Failed;
+            }
+
+            if version.has_preview {
+                if fs::remove_file(self.paths.version_preview_file(version.id)).is_err() {
+                    cleanup_result = CleanupResult::Failed;
+                }
             }
         }
 
@@ -635,14 +644,12 @@ pub enum CommitResult {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum CheckOutBranchResult {
     Ok,
-    HasUncommittedChanges,
     BranchNotFound,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
 pub enum CheckOutVersionResult {
     Ok,
-    HasUncommittedChanges,
     VersionNotFound,
 }
 
@@ -694,6 +701,7 @@ pub enum RemoveBranchResult {
     Ok(CleanupResult),
     BranchNotFound,
     CannotRemoveHeadBranch,
+    CannotRemoveHeadVersion,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]

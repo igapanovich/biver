@@ -3,6 +3,7 @@ use crate::helpers::diff::Diff;
 use crate::helpers::extensions::IndexExt;
 use crate::helpers::snapshot::Snapshot;
 use crate::helpers::version_path::ResolveVersionPathExt;
+use biver_core::repository::CreateBranchResult;
 use itertools::Itertools;
 use proptest::prelude::*;
 use proptest::sample::Index;
@@ -22,7 +23,7 @@ proptest! {
 
         let after = env.snapshot(&session);
 
-        prop_assert!(result.is_ok(), "create_branch succeeds if branch name and branch tip ID are valid");
+        prop_assert_eq!(result, CreateBranchResult::Ok, "create_branch succeeds if branch name and branch tip ID are valid");
 
         prop_assert_eq!(&before.head, &after.head, "successful create_branch does not modify head");
         prop_assert_eq!(&before.versions, &after.versions, "successful create_branch does not modify versions");
@@ -49,7 +50,7 @@ proptest! {
 
         let after = env.snapshot(&session);
 
-        prop_assert!(result.is_already_exists(), "create_branch fails if the branch name already exists");
+        prop_assert_eq!(result, CreateBranchResult::AlreadyExists, "create_branch fails if the branch name already exists");
 
         prop_assert_eq!(before, after, "failed create_branch does not modify anything");
     }
@@ -67,7 +68,7 @@ proptest! {
 
         let after = env.snapshot(&session);
 
-        prop_assert!(result.is_invalid_branch_tip_id(), "create_branch fails if branch tip ID is invalid");
+        prop_assert_eq!(result, CreateBranchResult::InvalidBranchTipId, "create_branch fails if branch tip ID is invalid");
 
         prop_assert_eq!(before, after, "failed create_branch does not modify anything");
     }

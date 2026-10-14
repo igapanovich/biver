@@ -7,8 +7,8 @@ use std::fs::File;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-pub fn write_tree(paths: &RepositoryPaths, repo: &Tree) -> Result<()> {
-    assert!(repo.valid(), "Repository data is not valid: {:#?}", repo);
+pub fn write_tree(paths: &RepositoryPaths, tree: &Tree) -> Result<()> {
+    assert!(tree.valid(), "Tree is not valid: {:#?}", tree);
 
     let backup1 = paths.tree_backup1_file();
     let backup2 = paths.tree_backup2_file();
@@ -22,7 +22,7 @@ pub fn write_tree(paths: &RepositoryPaths, repo: &Tree) -> Result<()> {
     rotate_backup(&backup1, &backup2, Duration::from_mins(5))?;
     rotate_backup(paths.tree_file(), &backup1, Duration::from_secs(10))?;
 
-    let tree_content = serde_json::to_string_pretty(repo)?;
+    let tree_content = serde_json::to_string_pretty(tree)?;
     let tree_tmp = paths.tree_file().with_extension(".tmp");
 
     if fs::exists(paths.tree_file())? {

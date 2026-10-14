@@ -4,6 +4,7 @@ use crate::helpers::arb::TestEnvOption::{
 };
 use crate::helpers::diff::Diff;
 use crate::helpers::snapshot::Snapshot;
+use biver_core::repository::CommitResult;
 use itertools::Itertools;
 use proptest::prelude::*;
 
@@ -18,7 +19,7 @@ proptest! {
 
         let after = env.snapshot(&session);
 
-        prop_assert!(result.is_ok(), "commit succeeds if head is on a branch and there are uncommitted changes");
+        prop_assert_eq!(result, CommitResult::Ok, "commit succeeds if head is on a branch and there are uncommitted changes");
 
         prop_assert!(!after.has_uncommitted_changes, "successful commit does not leave uncommitted changes");
         prop_assert_eq!(&before.head, &after.head, "successful commit does not modify head");
@@ -47,7 +48,7 @@ proptest! {
 
         let after = env.snapshot(&session);
 
-        prop_assert!(result.is_head_must_be_on_branch(), "commit fails if head is not pointing at a branch");
+        prop_assert_eq!(result, CommitResult::HeadMustBeOnBranch, "commit fails if head is not pointing at a branch");
 
         prop_assert_eq!(before, after, "failed commit does not modify anything");
     }
@@ -62,7 +63,7 @@ proptest! {
 
         let after = env.snapshot(&session);
 
-        prop_assert!(result.is_no_uncommitted_changes(), "commit is noop if there are no uncommitted changes");
+        prop_assert_eq!(result, CommitResult::NoUncommittedChanges, "commit is noop if there are no uncommitted changes");
 
         prop_assert_eq!(before, after, "noop commit does not modify anything");
     }

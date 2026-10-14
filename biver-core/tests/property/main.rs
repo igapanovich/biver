@@ -12,5 +12,6 @@ mod commit_tests;
 mod create_branch_tests;
 mod discard_tests;
 mod init_tests;
+mod remove_branch_tests;
 mod rename_branch_tests;
 mod update_description_tests;

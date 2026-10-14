@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 82baa757867c504de802bcbf9ee56dbc3c93830dab70a808c40108d7935b9948 # shrinks to env = TestEnv(Some(RepositoryBlueprint { initial_branch: InitialBranchBlueprint { name: None, first_version: VersionBlueprint { changes: [Overwrite[]], description: "" }, following_versions: [] }, other_branches: [BranchBlueprint { diverge_at: Index(3010589559), name: "-", versions: [] }], head: Branch(Index(5637107067997194264)), uncommitted_changes: None })), old_branch_name = "-", new_branch_name = "j-U9_ySZxz-"

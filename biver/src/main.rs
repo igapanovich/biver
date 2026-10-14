@@ -267,9 +267,6 @@ fn run_command(command: Command) -> Result<()> {
 
                     match result {
                         CheckOutBranchResult::Ok => success_ok(),
-                        CheckOutBranchResult::HasUncommittedChanges => {
-                            error("Can not checkout because there are uncommitted changes")
-                        }
                         CheckOutBranchResult::BranchNotFound => error("Branch not found"),
                     }
                 }
@@ -278,9 +275,6 @@ fn run_command(command: Command) -> Result<()> {
 
                     match result {
                         CheckOutVersionResult::Ok => success_ok(),
-                        CheckOutVersionResult::HasUncommittedChanges => {
-                            error("Can not checkout because there are uncommitted changes")
-                        }
                         CheckOutVersionResult::VersionNotFound => error("Version not found"),
                     }
                 }
@@ -398,6 +392,9 @@ fn run_command(command: Command) -> Result<()> {
                     RemoveBranchResult::Ok(_) => success_ok(),
                     RemoveBranchResult::BranchNotFound => error("Branch does not exist"),
                     RemoveBranchResult::CannotRemoveHeadBranch => {
+                        error("Cannot remove the branch currently pointed at by head")
+                    }
+                    RemoveBranchResult::CannotRemoveHeadVersion => {
                         error("Cannot remove the version currently pointed at by head")
                     }
                 }
