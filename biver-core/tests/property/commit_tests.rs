@@ -1,9 +1,9 @@
-use crate::helpers::arb;
 use crate::helpers::arb::TestEnvOption::{
     HeadOnBranch, HeadOnVersion, NoUncommittedChanges, UncommittedChanges,
 };
 use crate::helpers::diff::Diff;
 use crate::helpers::snapshot::Snapshot;
+use crate::helpers::{arb, assert_version_content_integrity};
 use biver_core::repository::CommitResult;
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -36,6 +36,8 @@ proptest! {
             vec![before.head.branch_ref().unwrap()],
             "successful commit modifies head branch and only it"
         );
+
+        assert_version_content_integrity(session)?;
     }
 
     #[test]
@@ -51,6 +53,8 @@ proptest! {
         prop_assert_eq!(result, CommitResult::HeadMustBeOnBranch, "commit fails if head is not pointing at a branch");
 
         prop_assert_eq!(before, after, "failed commit does not modify anything");
+
+        assert_version_content_integrity(session)?;
     }
 
     #[test]
@@ -66,5 +70,7 @@ proptest! {
         prop_assert_eq!(result, CommitResult::NoUncommittedChanges, "commit is noop if there are no uncommitted changes");
 
         prop_assert_eq!(before, after, "noop commit does not modify anything");
+
+        assert_version_content_integrity(session)?;
     }
 }

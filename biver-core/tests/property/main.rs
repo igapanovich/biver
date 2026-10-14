@@ -6,6 +6,7 @@ mod test_config;
 
 mod helpers;
 
+mod amend_tests;
 mod check_out_branch_tests;
 mod check_out_version_tests;
 mod commit_tests;
@@ -14,4 +15,6 @@ mod discard_tests;
 mod init_tests;
 mod remove_branch_tests;
 mod rename_branch_tests;
+mod restore_tests;
+mod soft_reset_tests;
 mod update_description_tests;

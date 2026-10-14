@@ -1,8 +1,8 @@
-use crate::helpers::arb;
 use crate::helpers::diff::Diff;
 use crate::helpers::extensions::IteratorExt;
 use crate::helpers::snapshot::Snapshot;
 use crate::helpers::version_path::ResolveVersionPathExt;
+use crate::helpers::{arb, assert_version_content_integrity};
 use proptest::prelude::*;
 
 proptest! {
@@ -29,5 +29,7 @@ proptest! {
 
         prop_assert!(diff.inserted_versions.len() <= 1, "update_description modifies at most one version");
         prop_assert_eq!(diff.inserted_versions.len(), diff.removed_versions.len());
+
+        assert_version_content_integrity(session)?;
     }
 }

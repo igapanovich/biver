@@ -282,16 +282,7 @@ impl Tree {
             })
         } else {
             let remove_index = self
-                .versions
-                .iter()
-                .enumerate()
-                .find_map(|(i, v)| {
-                    if v.id == former_branch_tip_id {
-                        Some(i)
-                    } else {
-                        None
-                    }
-                })
+                .version_index(former_branch_tip_id)
                 .expect("Branch tip must be in versions");
 
             let former_branch_tip_version = self.versions.remove(remove_index);
@@ -328,10 +319,12 @@ impl Tree {
         if former_branch_tip.is_root() && branch_count != 1 {
             return Err(OverwriteBranchTipError::CannotOverwriteRootWhenOtherBranchesExist);
         }
+        let former_branch_tip_id = former_branch_tip.id;
 
+        let new_branch_tip_id = VersionId::new();
         let new_branch_tip = create_new_version(former_branch_tip);
         let new_branch_tip = Version {
-            id: VersionId::new(),
+            id: new_branch_tip_id,
             creation_time: new_branch_tip.creation_time,
             nickname: nickname::new_nickname(new_branch_tip.versioned_file_xxh3_128),
             versioned_file_length: new_branch_tip.versioned_file_length,
@@ -351,31 +344,24 @@ impl Tree {
             .find(|(b, id)| *b != branch_name && **id == former_branch_tip.id)
             .is_some();
 
+        self.versions.push(new_branch_tip);
+
         let still_in_use = has_children || is_tip_of_another_branch;
 
         if still_in_use {
             Ok(OverwriteBranchTipOutcome::OverwrittenVersionStillInUse {
-                new_tip_id: new_branch_tip.id,
-                former_tip_id: former_branch_tip.id,
+                new_tip_id: new_branch_tip_id,
+                former_tip_id: former_branch_tip_id,
             })
         } else {
             let remove_index = self
-                .versions
-                .iter()
-                .enumerate()
-                .find_map(|(i, v)| {
-                    if v.id == former_branch_tip.id {
-                        Some(i)
-                    } else {
-                        None
-                    }
-                })
+                .version_index(former_branch_tip_id)
                 .expect("ID already validated");
 
             let former_branch_tip_version = self.versions.remove(remove_index);
 
             Ok(OverwriteBranchTipOutcome::OverwrittenVersionRemoved {
-                new_tip_id: new_branch_tip.id,
+                new_tip_id: new_branch_tip_id,
                 former_tip: former_branch_tip_version,
             })
         }
@@ -508,6 +494,13 @@ impl Tree {
         self.branches.remove(branch_name);
 
         Ok(RemoveBranchOutcome { removed_versions })
+    }
+
+    fn version_index(&self, id: VersionId) -> Option<usize> {
+        self.versions
+            .iter()
+            .enumerate()
+            .find_map(|(i, v)| if v.id == id { Some(i) } else { None })
     }
 }
 

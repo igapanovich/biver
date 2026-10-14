@@ -62,7 +62,7 @@ fn file_operation_splice() -> impl Strategy<Value = FileOperation> {
     })
 }
 
-fn file_operation_non_empty_insert() -> impl Strategy<Value = FileOperation> {
+pub fn file_operation_non_empty_insert() -> impl Strategy<Value = FileOperation> {
     (any::<Index>(), non_empty_bytes()).prop_map(|(range_start, bytes)| FileOperation::Splice {
         range_start,
         range_length: None,

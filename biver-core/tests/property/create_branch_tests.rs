@@ -1,8 +1,8 @@
-use crate::helpers::arb;
 use crate::helpers::diff::Diff;
 use crate::helpers::extensions::IndexExt;
 use crate::helpers::snapshot::Snapshot;
 use crate::helpers::version_path::ResolveVersionPathExt;
+use crate::helpers::{arb, assert_version_content_integrity};
 use biver_core::repository::CreateBranchResult;
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -35,6 +35,8 @@ proptest! {
         prop_assert_eq!(diff.upserted_branches.keys().next(), Some(&valid_branch_name), "successful create_branch creates a branch with the provided name");
         prop_assert_eq!(diff.upserted_branches.values().next(), Some(&valid_branch_tip_id), "successful create_branch creates a branch at the provided version ID");
         prop_assert!(diff.removed_branches.is_empty(), "successful create_branch does not remove branches");
+
+        assert_version_content_integrity(session)?;
     }
 
     #[test]
@@ -53,6 +55,8 @@ proptest! {
         prop_assert_eq!(result, CreateBranchResult::AlreadyExists, "create_branch fails if the branch name already exists");
 
         prop_assert_eq!(before, after, "failed create_branch does not modify anything");
+
+        assert_version_content_integrity(session)?;
     }
 
     #[test]
@@ -71,5 +75,7 @@ proptest! {
         prop_assert_eq!(result, CreateBranchResult::InvalidBranchTipId, "create_branch fails if branch tip ID is invalid");
 
         prop_assert_eq!(before, after, "failed create_branch does not modify anything");
+
+        assert_version_content_integrity(session)?;
     }
 }

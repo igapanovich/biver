@@ -1,8 +1,8 @@
-use crate::helpers::arb;
 use crate::helpers::arb::TestEnvOption::AtLeastTwoBranches;
 use crate::helpers::diff::Diff;
 use crate::helpers::extensions::IndexExt;
 use crate::helpers::snapshot::Snapshot;
+use crate::helpers::{arb, assert_version_content_integrity};
 use biver_core::repository::RenameBranchResult;
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -38,6 +38,8 @@ proptest! {
         prop_assert_eq!(diff.upserted_branches.keys().next(), Some(&new_branch_name), "rename_branch creates a branch with the provided name");
         prop_assert_eq!(diff.removed_branches.len(), 1, "rename_branch removes one branch");
         prop_assert!(diff.removed_branches.contains(&old_branch_name), "rename_branch removes the branch with the old name");
+
+        assert_version_content_integrity(session)?;
     }
 
     #[test]
@@ -58,6 +60,8 @@ proptest! {
         prop_assert_eq!(result, RenameBranchResult::NewNameAlreadyExists, "rename_branch fails if the new branch name already exists");
 
         prop_assert_eq!(before, after, "failed rename_branch does not modify anything");
+
+        assert_version_content_integrity(session)?;
     }
 
     #[test]
@@ -76,5 +80,7 @@ proptest! {
         prop_assert_eq!(result, RenameBranchResult::OldNameNotFound, "rename_branch fails if the old branch name was not found");
 
         prop_assert_eq!(before, after, "failed rename_branch does not modify anything");
+
+        assert_version_content_integrity(session)?;
     }
 }

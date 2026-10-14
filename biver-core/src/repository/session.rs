@@ -51,6 +51,7 @@ pub struct Session {
     paths: RepositoryPaths,
     tree: Tree,
     cache: Cache,
+    cache_enabled: bool,
     broken: bool,
     lock: File,
 }
@@ -80,6 +81,7 @@ impl Session {
             paths,
             tree,
             cache,
+            cache_enabled: true,
             lock,
             broken: false,
         };
@@ -168,7 +170,7 @@ impl Session {
     pub fn amend(&mut self, description: Option<String>) -> Result<AmendResult> {
         use_break!(self, {
             let Some(head_branch) = self.tree.head_branch().cloned() else {
-                return Ok(AmendResult::HeadMustBeBranch);
+                return Ok(AmendResult::HeadMustBeOnBranch);
             };
 
             let head = self.tree.head_version();
@@ -365,7 +367,7 @@ impl Session {
     pub fn soft_reset(&mut self, stop_at_version_id: VersionId) -> Result<SoftResetResult> {
         use_break!(self, {
             let Some(head_branch) = self.tree.head_branch().cloned() else {
-                return Ok(SoftResetResult::HeadMustBeBranch);
+                return Ok(SoftResetResult::HeadMustBeOnBranch);
             };
 
             let stop_at_version_index =
@@ -528,6 +530,14 @@ impl Session {
         Ok(Some(Preview::new(temp)?.with_cleanup()))
     }
 
+    pub fn cache_enabled(&self) -> bool {
+        self.cache_enabled
+    }
+
+    pub fn set_cache_enabled(&mut self, enabled: bool) {
+        self.cache_enabled = enabled;
+    }
+
     fn flush(&mut self) -> Result<()> {
         let result = write_tree(&self.paths, &self.tree);
 
@@ -549,7 +559,14 @@ impl Session {
             .tree
             .version_and_ancestors(version_id)
             .expect("version_id was invalid")
-            .map(|v| (v, self.cache.get(v.id)))
+            .map(|v| {
+                let cached = if self.cache_enabled {
+                    self.cache.get(v.id)
+                } else {
+                    None
+                };
+                (v, cached)
+            })
             .take_while_inclusive(|(v, cache)| v.content_blob_kind.is_patch() && cache.is_none())
             .collect_vec();
 
@@ -670,7 +687,7 @@ pub enum RestoreVersionResult {
 pub enum SoftResetResult {
     Ok(CleanupResult),
     HeadBranchTipIsAlreadyThere,
-    HeadMustBeBranch,
+    HeadMustBeOnBranch,
     InvalidStopAtVersionId,
 }
 
@@ -678,7 +695,7 @@ pub enum SoftResetResult {
 pub enum AmendResult {
     Ok(CleanupResult),
     NoUncommittedChanges,
-    HeadMustBeBranch,
+    HeadMustBeOnBranch,
     CannotAmendRootWhenOtherBranchesExist,
 }
 

@@ -151,8 +151,6 @@ fn run_command(command: Command) -> Result<()> {
             confirmed,
             description,
         } => {
-            fail_with_untested()?;
-
             let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             if !confirmed {
@@ -168,7 +166,7 @@ fn run_command(command: Command) -> Result<()> {
             match result {
                 AmendResult::Ok(_) => success_ok(),
                 AmendResult::NoUncommittedChanges => warning("No uncommitted changes"),
-                AmendResult::HeadMustBeBranch => error("Head must point at a branch"),
+                AmendResult::HeadMustBeOnBranch => error("Head must point at a branch"),
                 AmendResult::CannotAmendRootWhenOtherBranchesExist => {
                     error("Cannot amend root when there is more than one branch")
                 }
@@ -245,7 +243,7 @@ fn run_command(command: Command) -> Result<()> {
                 SoftResetResult::HeadBranchTipIsAlreadyThere => {
                     warning("Head branch is already on the target")
                 }
-                SoftResetResult::HeadMustBeBranch => error("Head must be on a branch"),
+                SoftResetResult::HeadMustBeOnBranch => error("Head must be on a branch"),
                 SoftResetResult::InvalidStopAtVersionId => error("Invalid reset range"),
             }
         }

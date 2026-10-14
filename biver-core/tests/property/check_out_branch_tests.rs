@@ -1,5 +1,5 @@
-use crate::helpers::arb;
 use crate::helpers::extensions::IndexExt;
+use crate::helpers::{arb, assert_version_content_integrity};
 use biver_core::data::Head;
 use biver_core::repository::CheckOutBranchResult;
 use itertools::Itertools;
@@ -31,6 +31,8 @@ proptest! {
         prop_assert_eq!(after.head, Head::Branch(valid_branch_name), "successful check_out_branch makes head point at the target branch");
         prop_assert_eq!(&before.branches, &after.branches, "successful check_out_branch does not modify branches");
         prop_assert_eq!(&before.versions, &after.versions, "successful check_out_branch does not modify versions");
+
+        assert_version_content_integrity(session)?;
     }
 
     #[test]
@@ -48,5 +50,7 @@ proptest! {
         prop_assert_eq!(result, CheckOutBranchResult::BranchNotFound, "check_out_branch fails if branch is not found");
 
         prop_assert_eq!(before, after, "failed check_out_branch does not modify anything");
+
+        assert_version_content_integrity(session)?;
     }
 }

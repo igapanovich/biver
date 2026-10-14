@@ -1,4 +1,4 @@
-use crate::helpers::arb;
+use crate::helpers::{arb, assert_version_content_integrity};
 use proptest::prelude::*;
 
 proptest! {
@@ -16,5 +16,7 @@ proptest! {
         prop_assert_eq!(before.head, after.head, "discard does not modify head");
         prop_assert_eq!(before.branches, after.branches, "discard does not modify branches");
         prop_assert_eq!(before.versions, after.versions, "discard does not modify versions");
+
+        assert_version_content_integrity(session)?;
     }
 }

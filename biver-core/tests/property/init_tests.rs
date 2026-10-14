@@ -1,6 +1,6 @@
-use crate::helpers::arb;
 use crate::helpers::extensions::UnwrapExt;
 use crate::helpers::test_env::TestEnv;
+use crate::helpers::{arb, assert_version_content_integrity};
 use biver_core::repository;
 use proptest::prelude::*;
 use std::fs;
@@ -30,5 +30,7 @@ proptest! {
         prop_assert_eq!(tree.versions().count(), 1, "init creates one version");
         prop_assert!(tree.head().is_branch(), "init sets head pointing at the branch");
         prop_assert_eq!(root_content, init_bytes.as_ref(), "root version has the same content as versioned file");
+
+        assert_version_content_integrity(session)?;
     }
 }

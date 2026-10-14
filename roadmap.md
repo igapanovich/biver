@@ -1,8 +1,9 @@
 # 0.1
 
+- Tests
+- CBOR
 - Cache for version file content
     - LRU
-- Tests
 - Logs
 - Licenses
 
