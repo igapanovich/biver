@@ -104,6 +104,7 @@ fn resolve_as_nickname(session: &Session, nickname: &str) -> Option<VersionId> {
 
     None
 }
+
 fn nickname_matches(nickname: &str, tested_str: &str) -> bool {
     if nickname.eq_ignore_ascii_case(tested_str) {
         return true;

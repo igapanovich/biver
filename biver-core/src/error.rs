@@ -17,9 +17,6 @@ pub enum Error {
     #[error("toml deserialization error: {0}")]
     TomlDeserialization(#[from] toml::de::Error),
 
-    #[error("invalid configuration: {0}")]
-    InvalidConfig(String),
-
     #[error("external command error: {0}")]
     ExternalCommand(String),
 
