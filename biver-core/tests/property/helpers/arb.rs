@@ -11,6 +11,7 @@ use proptest::option;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::string::string_regex;
+use std::path::PathBuf;
 
 pub fn env() -> impl Strategy<Value = TestEnv> {
     repository_blueprint(&[]).prop_map(TestEnv::from_blueprint)
@@ -87,10 +88,6 @@ pub fn branch_name() -> impl Strategy<Value = BranchName> {
         .prop_map(|n| BranchName::new(n).unwrap())
 }
 
-pub fn branch_name_option() -> impl Strategy<Value = Option<BranchName>> {
-    prop_oneof![Just(None), branch_name().prop_map(Some)]
-}
-
 pub fn version_id() -> impl Strategy<Value = VersionId> {
     any::<u128>().prop_map(VersionId::from_u128)
 }
@@ -154,7 +151,7 @@ fn head_version_blueprint() -> impl Strategy<Value = HeadBlueprint> {
 }
 
 fn initial_branch_blueprint() -> impl Strategy<Value = InitialBranchBlueprint> {
-    (branch_name_option(), vec(version_blueprint(), 1..=8)).prop_map(|(name, mut versions)| {
+    (option::of(branch_name()), vec(version_blueprint(), 1..=8)).prop_map(|(name, mut versions)| {
         InitialBranchBlueprint {
             name,
             first_version: versions.remove(0),
@@ -182,5 +179,39 @@ fn version_blueprint() -> impl Strategy<Value = VersionBlueprint> {
             changes,
             description,
         }
+    })
+}
+
+pub fn fs_path_segment() -> impl Strategy<Value = PathBuf> {
+    "[^<>:\"/\\\\|?*\\x00-\\x1f]{1,32}"
+        .prop_filter("fs_path/invalid_segment", |s| {
+            if [
+                "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+                "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
+                "LPT9", ".", "..",
+            ]
+            .contains(&s.as_str())
+            {
+                return false;
+            }
+
+            if s.ends_with(" ") || s.ends_with(".") {
+                return false;
+            }
+
+            true
+        })
+        .prop_map(|s| PathBuf::from(s))
+}
+
+pub fn fs_path() -> impl Strategy<Value = PathBuf> {
+    vec(fs_path_segment(), 1..=8).prop_map(|mut segments| {
+        let mut path = segments.pop().unwrap();
+
+        while segments.len() > 0 {
+            path = path.join(segments.pop().unwrap());
+        }
+
+        path
     })
 }

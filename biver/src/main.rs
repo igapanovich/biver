@@ -284,8 +284,6 @@ fn run_command(command: Command) -> Result<()> {
             output,
             target,
         } => {
-            fail_with_untested()?;
-
             let output = output.unwrap_or_else(|| versioned_file_path.clone());
 
             let session = repository::try_start_session(&versioned_file_path)?.result()?;
@@ -299,9 +297,12 @@ fn run_command(command: Command) -> Result<()> {
             match result {
                 RestoreVersionResult::Ok => success_ok(),
                 RestoreVersionResult::WouldOverwriteUncommittedChanges => error(
-                    "Cannot restore to the versioned file because there are uncommitted changes",
+                    "Cannot restore into the versioned file because there are uncommitted changes",
                 ),
                 RestoreVersionResult::VersionNotFound => error("Invalid target"),
+                RestoreVersionResult::CannotRestoreIntoRepositoryDir => {
+                    error("Cannot restore into a path inside the repository")
+                }
             }
         }
 

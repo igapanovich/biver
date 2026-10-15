@@ -15,6 +15,6 @@ mod discard_tests;
 mod init_tests;
 mod remove_branch_tests;
 mod rename_branch_tests;
-mod restore_tests;
+mod restore_version_tests;
 mod soft_reset_tests;
 mod update_description_tests;

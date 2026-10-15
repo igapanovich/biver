@@ -2,13 +2,14 @@ use crate::helpers::extensions::UnwrapExt;
 use crate::helpers::test_env::TestEnv;
 use crate::helpers::{arb, assert_version_content_integrity};
 use biver_core::repository;
+use proptest::option;
 use proptest::prelude::*;
 use std::fs;
 use std::io::Read;
 
 proptest! {
     #[test]
-    fn init_properties(init_bytes in arb::bytes(), branch_name in arb::branch_name_option(), description in any::<String>()) {
+    fn init_properties(init_bytes in arb::bytes(), branch_name in option::of(arb::branch_name()), description in any::<String>()) {
         let env = TestEnv::uninitialized();
 
         fs::write(&env.versioned_file_path(), &init_bytes)?;

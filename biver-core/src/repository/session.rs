@@ -311,14 +311,30 @@ impl Session {
         destination: &Path,
     ) -> Result<RestoreVersionResult> {
         use_break_non_critical!(self, {
-            if fs::canonicalize(destination)? == fs::canonicalize(self.paths.versioned_file())?
-                && self.has_uncommitted_changes()?
-            {
+            let destination = if fs::exists(destination)? {
+                &fs::canonicalize(destination)?
+            } else {
+                destination
+            };
+
+            let versioned_file = fs::canonicalize(self.paths.versioned_file())?;
+
+            if destination == versioned_file && self.has_uncommitted_changes()? {
                 return Ok(RestoreVersionResult::WouldOverwriteUncommittedChanges);
+            }
+
+            let repository_dir = fs::canonicalize(self.paths.repository_dir())?;
+
+            if destination.starts_with(repository_dir) {
+                return Ok(RestoreVersionResult::CannotRestoreIntoRepositoryDir);
             }
 
             if self.tree.version(version_id).is_none() {
                 return Ok(RestoreVersionResult::VersionNotFound);
+            }
+
+            if let Some(dest_parent) = destination.parent() {
+                fs::create_dir_all(dest_parent)?;
             }
 
             let extr_path = self.extraction_path(version_id)?;
@@ -708,6 +724,7 @@ pub enum RestoreVersionResult {
     Ok,
     WouldOverwriteUncommittedChanges,
     VersionNotFound,
+    CannotRestoreIntoRepositoryDir,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::helpers::repository_blueprint::RepositoryBlueprint;
 use crate::helpers::snapshot::Snapshot;
 use crate::{test_config, test_dir};
@@ -60,6 +62,10 @@ impl TestEnv {
 
     pub fn versioned_file_path(&self) -> &Path {
         &self.versioned_file_path
+    }
+
+    pub fn test_dir(&self) -> &Path {
+        &self.test_dir
     }
 
     pub fn start_session(&self) -> Session {
