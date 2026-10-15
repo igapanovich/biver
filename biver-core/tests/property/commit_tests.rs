@@ -4,7 +4,7 @@ use crate::helpers::arb::TestEnvOption::{
 use crate::helpers::diff::Diff;
 use crate::helpers::snapshot::Snapshot;
 use crate::helpers::{arb, assert_version_content_integrity};
-use biver_core::repository::CommitResult;
+use biver_core::repository::{CleanupResult, CommitResult};
 use itertools::Itertools;
 use proptest::prelude::*;
 
@@ -19,7 +19,7 @@ proptest! {
 
         let after = env.snapshot(&session);
 
-        prop_assert_eq!(result, CommitResult::Ok, "commit succeeds if head is on a branch and there are uncommitted changes");
+        prop_assert_eq!(result, CommitResult::Ok(CleanupResult::Ok), "commit succeeds if head is on a branch and there are uncommitted changes");
 
         prop_assert!(!after.has_uncommitted_changes, "successful commit does not leave uncommitted changes");
         prop_assert_eq!(&before.head, &after.head, "successful commit does not modify head");

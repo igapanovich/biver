@@ -1,5 +1,4 @@
 use crate::helpers::diff::Diff;
-use crate::helpers::extensions::IteratorExt;
 use crate::helpers::snapshot::Snapshot;
 use crate::helpers::version_path::ResolveVersionPathExt;
 use crate::helpers::{arb, assert_version_content_integrity};
@@ -21,14 +20,18 @@ proptest! {
         prop_assert_eq!(&before.head, &after.head, "update_description does not modify head");
         prop_assert_eq!(&before.branches, &after.branches, "update_description does not modify branches");
 
-        let version_contents_before = before.versions.iter().map(|v| (v.version.id, &v.content_blob)).collect_set();
-        let version_contents_after = after.versions.iter().map(|v| (v.version.id, &v.content_blob)).collect_set();
-        prop_assert_eq!(version_contents_before, version_contents_after, "update_description does not modify version contents");
-
         let diff = Snapshot::diff(&before, &after);
 
         prop_assert!(diff.inserted_versions.len() <= 1, "update_description modifies at most one version");
         prop_assert_eq!(diff.inserted_versions.len(), diff.removed_versions.len());
+
+        if diff.inserted_versions.len() == 1 {
+            let before = diff.removed_versions.iter().last().unwrap();
+            let after = diff.inserted_versions.iter().last().unwrap();
+            prop_assert_eq!(&before.id, &after.id, "update_description does not modify version ID");
+            prop_assert_eq!(&before.parent_id, &after.parent_id, "update_description does not modify version parent");
+            prop_assert_eq!(&before.xxh3_128, &after.xxh3_128, "update_description does not modify version file content");
+        }
 
         assert_version_content_integrity(session)?;
     }

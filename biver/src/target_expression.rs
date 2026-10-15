@@ -96,7 +96,7 @@ fn resolve_as_nickname(session: &Session, nickname: &str) -> Option<VersionId> {
 
     if let Some(version) = versions
         .iter()
-        .filter(|v| nickname_matches(&v.nickname, nickname))
+        .filter(|v| nickname_matches(&v.nickname(), nickname))
         .next()
     {
         return Some(version.id);

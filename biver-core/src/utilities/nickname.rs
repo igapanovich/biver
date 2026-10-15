@@ -64,9 +64,9 @@ const NOUNS: &[&str] = &[
     "wrap", "yard", "year", "yolk", "zone",
 ];
 
-pub fn new_nickname(random_value: u128) -> String {
-    let adjective_index = random_value % (ADJECTIVES.len() as u128);
-    let noun_index = random_value % (NOUNS.len() as u128);
+pub fn from(source_value: u128) -> String {
+    let adjective_index = source_value % (ADJECTIVES.len() as u128);
+    let noun_index = source_value % (NOUNS.len() as u128);
 
     format!(
         "{}-{}",

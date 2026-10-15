@@ -1,11 +1,11 @@
 use crate::data::tree::NewVersion;
-use crate::data::{BranchName, ContentBlobKind, Tree};
+use crate::data::{BranchName, Tree};
 use crate::error::Result;
-use crate::repository::common::versioned_file_meta;
 use crate::utilities::external_preview_command::create_preview;
-use crate::{Configuration, Error};
+use crate::utilities::xxh3_128;
+use crate::{Config, Error};
 use chrono::Utc;
-pub use paths::RepositoryPaths;
+pub use paths::Paths;
 pub use session::*;
 use std::fs;
 use std::fs::File;
@@ -26,7 +26,7 @@ pub enum TryStartSessionResult {
 }
 
 pub fn try_start_session(versioned_file_path: &Path) -> Result<TryStartSessionResult> {
-    let paths = RepositoryPaths::new(versioned_file_path);
+    let paths = Paths::new(versioned_file_path);
 
     if !initialized_internal(&paths)? {
         return Ok(TryStartSessionResult::NotInitialized);
@@ -51,19 +51,20 @@ pub enum InitializeResult {
 }
 
 pub fn initialize(
-    config: Configuration,
+    config: Config,
     versioned_file_path: &Path,
     branch_name: Option<BranchName>,
     description: String,
 ) -> Result<InitializeResult> {
-    let paths = RepositoryPaths::new(versioned_file_path);
+    let paths = Paths::new(versioned_file_path);
 
     if initialized_internal(&paths)? {
         return Ok(InitializeResult::AlreadyInitialized);
     }
 
     fs::create_dir_all(paths.repository_dir())?;
-    fs::create_dir_all(paths.content_blob_dir())?;
+    fs::create_dir_all(paths.full_content_dir())?;
+    fs::create_dir_all(paths.reverse_patch_dir())?;
     fs::create_dir_all(paths.preview_dir())?;
     fs::create_dir_all(paths.backup_dir())?;
 
@@ -72,28 +73,21 @@ pub fn initialize(
     let config_str = toml::ser::to_string(&config)?;
     fs::write(paths.config_file(), config_str)?;
 
-    let versioned_file_meta = versioned_file_meta(&paths)?;
-
-    let preview_command = config.preview_command;
-
     let tree = Tree::new(
         branch_name.unwrap_or_else(default_initial_branch_name),
         NewVersion {
             creation_time: Utc::now(),
-            versioned_file_length: versioned_file_meta.length,
-            versioned_file_xxh3_128: versioned_file_meta.xxh3_128,
+            xxh3_128: xxh3_128::from_file_path(paths.versioned_file())?,
             description,
-            content_blob_kind: ContentBlobKind::Full,
-            has_preview: preview_command.is_some(),
         },
     );
 
     let root_id = tree.head_version_id();
 
-    let content_blob_file_path = paths.version_content_blob_file(root_id);
+    let content_blob_file_path = paths.version_full_content_file(root_id);
     fs::copy(&paths.versioned_file(), &content_blob_file_path)?;
 
-    if let Some(preview_command) = preview_command {
+    if let Some(preview_command) = config.preview_command {
         create_preview(
             &preview_command,
             &paths.versioned_file(),
@@ -107,14 +101,14 @@ pub fn initialize(
 }
 
 pub fn initialized(versioned_file_path: &Path) -> Result<bool> {
-    initialized_internal(&RepositoryPaths::new(versioned_file_path))
+    initialized_internal(&Paths::new(versioned_file_path))
 }
 
-fn initialized_internal(paths: &RepositoryPaths) -> Result<bool> {
+fn initialized_internal(paths: &Paths) -> Result<bool> {
     Ok(fs::exists(paths.tree_file())?)
 }
 
-fn validate_schema_version(paths: &RepositoryPaths) -> Result<()> {
+fn validate_schema_version(paths: &Paths) -> Result<()> {
     if !fs::exists(paths.schema_version_file())? {
         return Err(Error::IncompatibleSchemaVersion("".to_string()));
     }

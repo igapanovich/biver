@@ -2,7 +2,7 @@ use crate::helpers::repository_blueprint::RepositoryBlueprint;
 use crate::helpers::snapshot::Snapshot;
 use crate::{test_config, test_dir};
 use biver_core::repository::{Session, TryStartSessionResult};
-use biver_core::{Configuration, repository};
+use biver_core::{Config, repository};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -10,7 +10,7 @@ use std::{env, fs};
 pub struct TestEnv {
     blueprint: Option<RepositoryBlueprint>,
     test_dir: PathBuf,
-    config: Configuration,
+    config: Config,
     versioned_file_path: PathBuf,
 }
 
@@ -54,7 +54,7 @@ impl TestEnv {
         env
     }
 
-    pub fn config(&self) -> &Configuration {
+    pub fn config(&self) -> &Config {
         &self.config
     }
 

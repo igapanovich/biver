@@ -1,11 +1,11 @@
-use biver_core::Configuration;
+use biver_core::Config;
 
-pub fn create() -> Configuration {
+pub fn create() -> Config {
     fn string_vec(collection: &[&str]) -> Vec<String> {
         collection.into_iter().map(|s| s.to_string()).collect()
     }
 
-    Configuration {
+    Config {
         create_patch_command: string_vec(&[
             "xdelta3", "-D", "-e", "-s", "{old}", "{new}", "{patch}",
         ]),

@@ -3,10 +3,11 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
-pub struct RepositoryPaths {
+pub struct Paths {
     versioned_file: PathBuf,
     repository_dir: PathBuf,
-    content_blob_dir: PathBuf,
+    full_content_dir: PathBuf,
+    reverse_patch_dir: PathBuf,
     preview_dir: PathBuf,
     tree_file: PathBuf,
     backup_dir: PathBuf,
@@ -20,14 +21,15 @@ pub struct RepositoryPaths {
     lock_file: PathBuf,
 }
 
-impl RepositoryPaths {
+impl Paths {
     pub fn new(versioned_file_path: &Path) -> Self {
         let repository_dir = repository_dir(&versioned_file_path);
         let backup_dir = repository_dir.join("backup");
 
-        RepositoryPaths {
+        Paths {
             versioned_file: versioned_file_path.to_path_buf(),
-            content_blob_dir: repository_dir.join("content"),
+            full_content_dir: repository_dir.join("full_content"),
+            reverse_patch_dir: repository_dir.join("reverse_patch"),
             preview_dir: repository_dir.join("preview"),
             tree_file: repository_dir.join("tree"),
             tree_backup1_file: backup_dir.join("tree_backup1"),
@@ -51,12 +53,30 @@ impl RepositoryPaths {
         &self.repository_dir
     }
 
-    pub fn content_blob_dir(&self) -> &Path {
-        &self.content_blob_dir
+    pub fn full_content_dir(&self) -> &Path {
+        &self.full_content_dir
+    }
+
+    pub fn version_full_content_file(&self, version_id: VersionId) -> PathBuf {
+        self.full_content_dir()
+            .join(version_id_file_name(version_id))
+    }
+
+    pub fn reverse_patch_dir(&self) -> &Path {
+        &self.reverse_patch_dir
+    }
+
+    pub fn version_reverse_patch_file(&self, version_id: VersionId) -> PathBuf {
+        self.reverse_patch_dir()
+            .join(version_id_file_name(version_id))
     }
 
     pub fn preview_dir(&self) -> &Path {
         &self.preview_dir
+    }
+
+    pub fn version_preview_file(&self, version_id: VersionId) -> PathBuf {
+        self.preview_dir.join(version_id_file_name(version_id))
     }
 
     pub fn backup_dir(&self) -> &Path {
@@ -97,14 +117,6 @@ impl RepositoryPaths {
 
     pub fn tree_backup5_file(&self) -> &Path {
         &self.tree_backup5_file
-    }
-
-    pub fn version_content_blob_file(&self, version_id: VersionId) -> PathBuf {
-        self.content_blob_dir.join(version_id_file_name(version_id))
-    }
-
-    pub fn version_preview_file(&self, version_id: VersionId) -> PathBuf {
-        self.preview_dir.join(version_id_file_name(version_id))
     }
 }
 

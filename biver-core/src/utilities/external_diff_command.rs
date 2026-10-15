@@ -1,9 +1,9 @@
-use crate::configuration::Configuration;
+use crate::config::Config;
 use crate::error::Result;
 use crate::utilities::external_command;
 use std::path::Path;
 
-pub fn create_patch(config: &Configuration, old: &Path, new: &Path, patch: &Path) -> Result<()> {
+pub fn create_patch(config: &Config, old: &Path, new: &Path, patch: &Path) -> Result<()> {
     let args = [
         ("old", &*old.to_string_lossy()),
         ("new", &*new.to_string_lossy()),
@@ -13,7 +13,7 @@ pub fn create_patch(config: &Configuration, old: &Path, new: &Path, patch: &Path
     Ok(())
 }
 
-pub fn apply_patch(config: &Configuration, old: &Path, patch: &Path, new: &Path) -> Result<()> {
+pub fn apply_patch(config: &Config, old: &Path, patch: &Path, new: &Path) -> Result<()> {
     let args = [
         ("old", &*old.to_string_lossy()),
         ("patch", &*patch.to_string_lossy()),

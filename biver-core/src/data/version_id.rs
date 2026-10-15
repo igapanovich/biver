@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -23,5 +24,11 @@ impl VersionId {
 
     pub fn from_u128(number: u128) -> Self {
         Self(Uuid::from_u128(number))
+    }
+}
+
+impl Display for VersionId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }

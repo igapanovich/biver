@@ -116,6 +116,8 @@ proptest! {
     fn amend_cannot_amend_root_when_other_branches_exist_properties(env in arb::env_with_opts(&[NoUncommittedChanges]), description in any::<Option<String>>(), new_branch_name in arb::branch_name(), insert in arb::file_operation_non_empty_insert()) {
         let mut session = env.start_session();
 
+        prop_assume!(!session.tree().branch_names().contains(&new_branch_name));
+
         session.create_branch(new_branch_name.clone(), session.tree().root_version().id)?;
         session.check_out_branch(new_branch_name)?;
         insert.execute(env.versioned_file_path());

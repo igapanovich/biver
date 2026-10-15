@@ -2,8 +2,8 @@ use crate::helpers::extensions::{BiverResultUnwrap, IndexExt, UnwrapExt};
 use crate::helpers::file_operation::{FileOperation, FileOperations};
 use crate::helpers::version_path::{ResolveVersionPathExt, VersionPath};
 use biver_core::data::BranchName;
-use biver_core::repository::{CommitResult, CreateBranchResult, Session};
-use biver_core::{Configuration, repository};
+use biver_core::repository::{CleanupResult, CommitResult, CreateBranchResult, Session};
+use biver_core::{Config, repository};
 use itertools::Itertools;
 use proptest::sample::Index;
 use std::fmt::Debug;
@@ -15,6 +15,39 @@ pub struct RepositoryBlueprint {
     pub other_branches: Vec<BranchBlueprint>,
     pub head: HeadBlueprint,
     pub uncommitted_changes: Option<Vec<FileOperation>>,
+}
+
+impl RepositoryBlueprint {
+    pub fn build(&self, configuration: Config, versioned_file_path: &Path) -> Session {
+        let mut session = self
+            .initial_branch
+            .build(configuration, &versioned_file_path);
+
+        for b in &self.other_branches {
+            b.build(&mut session, &versioned_file_path);
+        }
+
+        match &self.head {
+            HeadBlueprint::Branch(index) => {
+                let branches = session.tree().branch_names().sorted().collect_vec();
+                let branch_name = index.get_copied(&branches);
+                session
+                    .check_out_branch(branch_name.clone())
+                    .unwrap()
+                    .unwrap();
+            }
+            HeadBlueprint::Version(path) => {
+                let version_id = session.tree().resolve_version_path(path).id;
+                session.check_out_version(version_id).unwrap().unwrap();
+            }
+        }
+
+        if let Some(uncommitted_changes) = &self.uncommitted_changes {
+            uncommitted_changes.execute(&versioned_file_path);
+        }
+
+        session
+    }
 }
 
 impl Debug for RepositoryBlueprint {
@@ -53,6 +86,37 @@ pub struct InitialBranchBlueprint {
     pub following_versions: Vec<VersionBlueprint>,
 }
 
+impl InitialBranchBlueprint {
+    fn build(&self, config: Config, versioned_file_path: &Path) -> Session {
+        self.first_version.changes.execute(&versioned_file_path);
+
+        let init_result = repository::initialize(
+            config,
+            versioned_file_path,
+            self.name.clone(),
+            self.first_version.description.clone(),
+        )
+        .unwrap();
+
+        assert!(init_result.is_ok());
+
+        let mut session = repository::try_start_session(versioned_file_path)
+            .unwrap()
+            .unwrap();
+
+        for v in &self.following_versions {
+            v.changes.execute(&versioned_file_path);
+
+            match session.commit(v.description.clone()).unwrap() {
+                CommitResult::Ok(CleanupResult::Ok) | CommitResult::NoUncommittedChanges => {}
+                _ => panic!("Commit failed"),
+            };
+        }
+
+        session
+    }
+}
+
 impl Debug for InitialBranchBlueprint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = self
@@ -74,61 +138,6 @@ pub struct BranchBlueprint {
     pub diverge_at: Index,
     pub name: BranchName,
     pub versions: Vec<VersionBlueprint>,
-}
-
-impl Debug for BranchBlueprint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Diverge({}) Name({}) {:?}",
-            self.diverge_at.debug_fraction(),
-            self.name.as_str(),
-            self.versions
-        )
-    }
-}
-
-#[derive(Clone)]
-pub struct VersionBlueprint {
-    pub changes: Vec<FileOperation>,
-    pub description: String,
-}
-
-impl Debug for VersionBlueprint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}:{:?})", &self.description, &self.changes)
-    }
-}
-
-impl InitialBranchBlueprint {
-    fn build(&self, config: Configuration, versioned_file_path: &Path) -> Session {
-        self.first_version.changes.execute(&versioned_file_path);
-
-        let init_result = repository::initialize(
-            config,
-            versioned_file_path,
-            self.name.clone(),
-            self.first_version.description.clone(),
-        )
-        .unwrap();
-
-        assert!(init_result.is_ok());
-
-        let mut session = repository::try_start_session(versioned_file_path)
-            .unwrap()
-            .unwrap();
-
-        for v in &self.following_versions {
-            v.changes.execute(&versioned_file_path);
-
-            match session.commit(v.description.clone()).unwrap() {
-                CommitResult::Ok | CommitResult::NoUncommittedChanges => {}
-                CommitResult::HeadMustBeOnBranch => panic!("Commit failed"),
-            };
-        }
-
-        session
-    }
 }
 
 impl BranchBlueprint {
@@ -166,42 +175,33 @@ impl BranchBlueprint {
             v.changes.execute(&versioned_file_path);
 
             match session.commit(v.description.clone()).unwrap() {
-                CommitResult::Ok | CommitResult::NoUncommittedChanges => {}
-                CommitResult::HeadMustBeOnBranch => panic!("Commit failed"),
+                CommitResult::Ok(CleanupResult::Ok) | CommitResult::NoUncommittedChanges => {}
+                _ => panic!("Commit failed"),
             };
         }
     }
 }
 
-impl RepositoryBlueprint {
-    pub fn build(&self, configuration: Configuration, versioned_file_path: &Path) -> Session {
-        let mut session = self
-            .initial_branch
-            .build(configuration, &versioned_file_path);
+impl Debug for BranchBlueprint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Diverge({}) Name({}) {:?}",
+            self.diverge_at.debug_fraction(),
+            self.name.as_str(),
+            self.versions
+        )
+    }
+}
 
-        for b in &self.other_branches {
-            b.build(&mut session, &versioned_file_path);
-        }
+#[derive(Clone)]
+pub struct VersionBlueprint {
+    pub changes: Vec<FileOperation>,
+    pub description: String,
+}
 
-        match &self.head {
-            HeadBlueprint::Branch(index) => {
-                let branches = session.tree().branch_names().sorted().collect_vec();
-                let branch_name = index.get_copied(&branches);
-                session
-                    .check_out_branch(branch_name.clone())
-                    .unwrap()
-                    .unwrap();
-            }
-            HeadBlueprint::Version(path) => {
-                let version_id = session.tree().resolve_version_path(path).id;
-                session.check_out_version(version_id).unwrap().unwrap();
-            }
-        }
-
-        if let Some(uncommitted_changes) = &self.uncommitted_changes {
-            uncommitted_changes.execute(&versioned_file_path);
-        }
-
-        session
+impl Debug for VersionBlueprint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}:{:?})", &self.description, &self.changes)
     }
 }

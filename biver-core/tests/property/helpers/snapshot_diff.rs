@@ -1,14 +1,14 @@
 use crate::helpers::diff::Diff;
 use crate::helpers::hash_map_diff::ValueDifference;
-use crate::helpers::snapshot::{Snapshot, VersionSnapshot};
-use biver_core::data::{BranchName, VersionId};
+use crate::helpers::snapshot::Snapshot;
+use biver_core::data::{BranchName, Version, VersionId};
 use std::collections::{HashMap, HashSet};
 
 pub struct SnapshotDiff {
     pub upserted_branches: HashMap<BranchName, VersionId>,
     pub removed_branches: HashSet<BranchName>,
-    pub inserted_versions: HashSet<VersionSnapshot>,
-    pub removed_versions: HashSet<VersionSnapshot>,
+    pub inserted_versions: HashSet<Version>,
+    pub removed_versions: HashSet<Version>,
 }
 
 impl<'a> Diff<'a> for Snapshot {

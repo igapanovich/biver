@@ -1,6 +1,5 @@
-use crate::data::{BranchName, ContentBlobKind, Head, Version, VersionId};
+use crate::data::{BranchName, Head, Version, VersionId};
 use crate::utilities::extensions::CountIsAtLeast;
-use crate::utilities::nickname;
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -19,13 +18,9 @@ impl Tree {
         let root_version = Version {
             id: VersionId::new(),
             creation_time: root_version.creation_time,
-            nickname: nickname::new_nickname(root_version.versioned_file_xxh3_128),
-            versioned_file_length: root_version.versioned_file_length,
-            versioned_file_xxh3_128: root_version.versioned_file_xxh3_128,
+            xxh3_128: root_version.xxh3_128,
             description: root_version.description,
-            parent: None,
-            content_blob_kind: root_version.content_blob_kind,
-            has_preview: root_version.has_preview,
+            parent_id: None,
         };
 
         Tree {
@@ -75,7 +70,7 @@ impl Tree {
         let root_version = self
             .versions
             .iter()
-            .filter(|v| v.parent.is_none())
+            .filter(|v| v.parent_id.is_none())
             .exactly_one();
 
         root_version.expect("A single root version should always exist")
@@ -93,11 +88,15 @@ impl Tree {
     }
 
     pub fn valid(&self) -> bool {
-        let there_is_exactly_one_root =
-            self.versions.iter().filter(|v| v.parent.is_none()).count() == 1;
+        let there_is_exactly_one_root = self
+            .versions
+            .iter()
+            .filter(|v| v.parent_id.is_none())
+            .count()
+            == 1;
 
         let all_parent_references_are_valid = self.versions.iter().all(|v| {
-            if let Some(parent) = &v.parent {
+            if let Some(parent) = &v.parent_id {
                 self.versions.iter().any(|v2| v2.id == *parent)
             } else {
                 true
@@ -162,11 +161,15 @@ impl Tree {
     pub fn children(&self, version_id: VersionId) -> impl Iterator<Item = &Version> {
         self.versions
             .iter()
-            .filter(move |v| v.parent == Some(version_id))
+            .filter(move |v| v.parent_id == Some(version_id))
     }
 
     pub fn branch_tip_ids(&self) -> &HashMap<BranchName, VersionId> {
         &self.branches
+    }
+
+    pub fn is_branch_tip(&self, version_id: VersionId) -> bool {
+        self.branches.values().contains(&version_id)
     }
 
     pub fn branch_names(&self) -> impl Iterator<Item = &BranchName> {
@@ -200,6 +203,26 @@ impl Tree {
         })
     }
 
+    pub fn branch_tip_to_version_chains(&self, version_id: VersionId) -> Vec<Vec<&Version>> {
+        let mut result: Vec<Vec<&Version>> = Vec::new();
+
+        for tip_id in self.branches.values() {
+            let b = self
+                .version_and_ancestors(*tip_id)
+                .expect("Should be found for a branch tip")
+                .take_while_inclusive(|v| v.id != version_id)
+                .collect_vec();
+
+            let last_id = b.last().map(|v| v.id);
+
+            if last_id == Some(version_id) {
+                result.push(b);
+            }
+        }
+
+        result
+    }
+
     pub(crate) fn extend_branch(
         &mut self,
         branch_name: &BranchName,
@@ -219,13 +242,9 @@ impl Tree {
         let new_version = Version {
             id,
             creation_time: new_version.creation_time,
-            nickname: nickname::new_nickname(new_version.versioned_file_xxh3_128),
-            versioned_file_length: new_version.versioned_file_length,
-            versioned_file_xxh3_128: new_version.versioned_file_xxh3_128,
+            xxh3_128: new_version.xxh3_128,
             description: new_version.description,
-            parent: Some(*branch_tip_id),
-            content_blob_kind: new_version.content_blob_kind,
-            has_preview: new_version.has_preview,
+            parent_id: Some(*branch_tip_id),
         };
 
         self.versions.push(new_version);
@@ -252,7 +271,7 @@ impl Tree {
             .iter()
             .find_map(|v| {
                 if v.id == *branch_tip_id {
-                    Some(v.parent)
+                    Some(v.parent_id)
                 } else {
                     None
                 }
@@ -319,6 +338,7 @@ impl Tree {
         if former_branch_tip.is_root() && branch_count != 1 {
             return Err(OverwriteBranchTipError::CannotOverwriteRootWhenOtherBranchesExist);
         }
+
         let former_branch_tip_id = former_branch_tip.id;
 
         let new_branch_tip_id = VersionId::new();
@@ -326,13 +346,9 @@ impl Tree {
         let new_branch_tip = Version {
             id: new_branch_tip_id,
             creation_time: new_branch_tip.creation_time,
-            nickname: nickname::new_nickname(new_branch_tip.versioned_file_xxh3_128),
-            versioned_file_length: new_branch_tip.versioned_file_length,
-            versioned_file_xxh3_128: new_branch_tip.versioned_file_xxh3_128,
+            xxh3_128: new_branch_tip.xxh3_128,
             description: new_branch_tip.description,
-            parent: former_branch_tip.parent,
-            content_blob_kind: new_branch_tip.content_blob_kind,
-            has_preview: new_branch_tip.has_preview,
+            parent_id: former_branch_tip.parent_id,
         };
 
         *branch_tip_id = new_branch_tip.id;
@@ -581,11 +597,8 @@ pub enum RemoveBranchError {
 
 pub struct NewVersion {
     pub creation_time: DateTime<Utc>,
-    pub versioned_file_length: u64,
-    pub versioned_file_xxh3_128: u128,
+    pub xxh3_128: u128,
     pub description: String,
-    pub content_blob_kind: ContentBlobKind,
-    pub has_preview: bool,
 }
 
 #[derive(Default)]
@@ -607,7 +620,7 @@ impl<'a> Iterator for VersionAndAncestors<'a> {
             return None;
         };
 
-        self.current_version_id = current_version.parent;
+        self.current_version_id = current_version.parent_id;
 
         Some(current_version)
     }
@@ -649,7 +662,7 @@ impl<'a> Iterator for BranchTipAndAncestorsExclusive<'a> {
         }
 
         self.at_branch_tip = false;
-        self.current_version_id = current_version.parent;
+        self.current_version_id = current_version.parent_id;
 
         Some(current_version)
     }

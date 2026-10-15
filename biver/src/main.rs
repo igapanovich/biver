@@ -140,7 +140,7 @@ fn run_command(command: Command) -> Result<()> {
 
             let result = session.commit(description.unwrap_or_default())?;
             match result {
-                CommitResult::Ok => success_ok(),
+                CommitResult::Ok(_) => success_ok(),
                 CommitResult::NoUncommittedChanges => warning("No uncommitted changes"),
                 CommitResult::HeadMustBeOnBranch => error("Head must point at a branch"),
             }
@@ -425,7 +425,7 @@ fn read_yes_no_input() -> Result<Option<bool>> {
     Ok(None)
 }
 
-fn core_config(versioned_file_extension: Option<&OsStr>) -> Result<biver_core::Configuration> {
+fn core_config(versioned_file_extension: Option<&OsStr>) -> Result<biver_core::Config> {
     let global_config = biver_configuration::read_global()?;
 
     let default = global_config.default_file_type_rules;
@@ -462,7 +462,7 @@ fn core_config(versioned_file_extension: Option<&OsStr>) -> Result<biver_core::C
         }
     }
 
-    let config = biver_core::Configuration {
+    let config = biver_core::Config {
         create_patch_command,
         apply_patch_command,
         preview_command,

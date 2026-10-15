@@ -1,13 +1,12 @@
 use crate::data::Tree;
 use crate::error::Result;
-use crate::repository::paths::RepositoryPaths;
-use crate::utilities::hash;
+use crate::repository::paths::Paths;
 use std::fs;
 use std::fs::File;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-pub fn write_tree(paths: &RepositoryPaths, tree: &Tree) -> Result<()> {
+pub fn write_tree(paths: &Paths, tree: &Tree) -> Result<()> {
     assert!(tree.valid(), "Tree is not valid: {:#?}", tree);
 
     let backup1 = paths.tree_backup1_file();
@@ -36,16 +35,6 @@ pub fn write_tree(paths: &RepositoryPaths, tree: &Tree) -> Result<()> {
     }
 
     Ok(())
-}
-pub struct VersionedFileMeta {
-    pub length: u64,
-    pub xxh3_128: u128,
-}
-
-pub fn versioned_file_meta(paths: &RepositoryPaths) -> Result<VersionedFileMeta> {
-    let xxh3_128 = hash::xxh3_128(File::open(&paths.versioned_file())?)?;
-    let length = fs::metadata(&paths.versioned_file())?.len();
-    Ok(VersionedFileMeta { length, xxh3_128 })
 }
 
 fn rotate_backup(previous: &Path, next: &Path, interval: Duration) -> Result<()> {

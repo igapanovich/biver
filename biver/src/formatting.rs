@@ -322,7 +322,7 @@ mod prepared {
                 }
             };
 
-            max_nickname_length = max_nickname_length.max(version.nickname.len());
+            max_nickname_length = max_nickname_length.max(version.nickname().len());
             max_creation_time_humanized_length =
                 max_creation_time_humanized_length.max(creation_time_humanized.len());
 
@@ -330,7 +330,7 @@ mod prepared {
                 creation_time: creation_time_local.format("%Y-%m-%d %H:%M:%S").to_string(),
                 creation_time_humanized: creation_time_humanized.to_string(),
                 id: version.id.bs58(),
-                nickname: version.nickname.clone(),
+                nickname: version.nickname(),
                 head_badge,
                 other_branches_here,
                 forking_branches,

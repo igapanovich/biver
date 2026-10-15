@@ -22,7 +22,7 @@ proptest! {
 
         let mut root_content = Vec::new();
         session
-            .raw_content_blob(tree.root_version().id)?
+            .version_full_content(tree.root_version().id)?
             .unwrap()
             .read_to_end(&mut root_content)?;
 
@@ -30,6 +30,7 @@ proptest! {
         prop_assert_eq!(tree.versions().count(), 1, "init creates one version");
         prop_assert!(tree.head().is_branch(), "init sets head pointing at the branch");
         prop_assert_eq!(root_content, init_bytes.as_ref(), "root version has the same content as versioned file");
+        prop_assert!(!session.has_uncommitted_changes()?, "init doesn't leave uncommitted changes");
 
         assert_version_content_integrity(session)?;
     }
