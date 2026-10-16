@@ -574,6 +574,10 @@ impl Session {
             .first()
             .expect("There should be at least one path to a valid ID");
 
+        let control_xxh3_128 = chain
+            .last()
+            .expect("There should be at least one version")
+            .xxh3_128;
         let full_content_path = self.paths.version_full_content_file(chain[0].id);
 
         assert!(fs::exists(&full_content_path)?);
@@ -587,6 +591,7 @@ impl Session {
         }
 
         Ok(ExtractionPath {
+            control_xxh3_128,
             starting_full: full_content_path,
             patches,
         })
@@ -594,6 +599,10 @@ impl Session {
 
     fn extract_path(&self, path: &ExtractionPath, destination: &Path) -> Result<()> {
         if path.patches.is_empty() {
+            assert_eq!(
+                xxh3_128::from_file_path(&path.starting_full)?,
+                path.control_xxh3_128
+            );
             fs::copy(&path.starting_full, destination)?;
             return Ok(());
         }
@@ -603,18 +612,21 @@ impl Session {
 
         let mut actual = &a;
         let mut stale = &b;
+        let mut stale_exists = false;
 
         fs::copy(&path.starting_full, actual)?;
 
         for patch_path in &path.patches {
-            if fs::exists(stale)? {
+            if stale_exists {
                 fs::remove_file(stale)?;
             }
 
             external_diff_command::apply_patch(&self.config, actual, patch_path, stale)?;
             mem::swap(&mut actual, &mut stale);
+            stale_exists = true;
         }
 
+        assert_eq!(xxh3_128::from_file_path(actual)?, path.control_xxh3_128);
         fs::copy(actual, destination)?;
 
         fs::remove_file(&a)?;
@@ -815,6 +827,7 @@ impl AddAssign for CleanupResult {
 
 #[derive(Debug)]
 struct ExtractionPath {
+    control_xxh3_128: u128,
     starting_full: PathBuf,
     patches: Vec<PathBuf>,
 }
