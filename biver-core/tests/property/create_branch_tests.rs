@@ -2,7 +2,7 @@ use crate::helpers::diff::Diff;
 use crate::helpers::extensions::IndexExt;
 use crate::helpers::snapshot::Snapshot;
 use crate::helpers::version_path::ResolveVersionPathExt;
-use crate::helpers::{arb, assert_version_content_integrity};
+use crate::helpers::{arb, assert_repository_integrity};
 use biver_core::repository::CreateBranchResult;
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -36,7 +36,7 @@ proptest! {
         prop_assert_eq!(diff.upserted_branches.values().next(), Some(&valid_branch_tip_id), "successful create_branch creates a branch at the provided version ID");
         prop_assert!(diff.removed_branches.is_empty(), "successful create_branch does not remove branches");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -56,7 +56,7 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed create_branch does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -76,6 +76,6 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed create_branch does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 }

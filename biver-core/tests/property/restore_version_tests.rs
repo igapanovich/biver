@@ -1,6 +1,6 @@
 use crate::helpers::arb::TestEnvOption::{NoUncommittedChanges, UncommittedChanges};
 use crate::helpers::version_path::ResolveVersionPathExt;
-use crate::helpers::{arb, assert_version_content_integrity};
+use crate::helpers::{arb, assert_repository_integrity};
 use biver_core::repository::{Paths, RestoreVersionResult};
 use proptest::option;
 use proptest::prelude::*;
@@ -24,7 +24,7 @@ proptest! {
         prop_assert_eq!(&before.head, &after.head, "successful restore_version does not modify head");
         prop_assert_eq!(&before.branches, &after.branches, "successful restore_version does not modify branches");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -43,7 +43,7 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed restore_version does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -62,7 +62,7 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed restore_version does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -91,7 +91,7 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed restore_version does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     fn restore_version_into_another_file_ok_properties(env in arb::env(), version_path in arb::version_path(), sub_path in arb::fs_path()) {
@@ -118,6 +118,6 @@ proptest! {
         prop_assert_eq!(&before.head, &after.head, "successful restore_version does not modify head");
         prop_assert_eq!(&before.branches, &after.branches, "successful restore_version does not modify branches");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 }

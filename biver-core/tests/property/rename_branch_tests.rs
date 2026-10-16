@@ -2,7 +2,7 @@ use crate::helpers::arb::TestEnvOption::AtLeastTwoBranches;
 use crate::helpers::diff::Diff;
 use crate::helpers::extensions::IndexExt;
 use crate::helpers::snapshot::Snapshot;
-use crate::helpers::{arb, assert_version_content_integrity};
+use crate::helpers::{arb, assert_repository_integrity};
 use biver_core::repository::RenameBranchResult;
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -39,7 +39,7 @@ proptest! {
         prop_assert_eq!(diff.removed_branches.len(), 1, "rename_branch removes one branch");
         prop_assert!(diff.removed_branches.contains(&old_branch_name), "rename_branch removes the branch with the old name");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -61,7 +61,7 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed rename_branch does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -81,6 +81,6 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed rename_branch does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 }

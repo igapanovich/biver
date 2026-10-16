@@ -3,7 +3,7 @@ use crate::helpers::arb::TestEnvOption::{
 };
 use crate::helpers::diff::Diff;
 use crate::helpers::snapshot::Snapshot;
-use crate::helpers::{arb, assert_version_content_integrity};
+use crate::helpers::{arb, assert_repository_integrity};
 use biver_core::repository::{CleanupResult, CommitResult};
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -37,7 +37,7 @@ proptest! {
             "successful commit modifies head branch and only it"
         );
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -54,7 +54,7 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed commit does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -71,6 +71,6 @@ proptest! {
 
         prop_assert_eq!(before, after, "noop commit does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 }

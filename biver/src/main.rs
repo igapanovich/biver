@@ -220,8 +220,6 @@ fn run_command(command: Command) -> Result<()> {
             confirmed,
             target,
         } => {
-            fail_with_untested()?;
-
             let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
 
             if !confirmed {
@@ -484,13 +482,6 @@ fn init_tracing() {
         );
 
     tracing_subscriber::registry().with(stdout_layer).init();
-}
-
-fn fail_with_untested() -> Result<()> {
-    Err(Error {
-        message: "Operation is not tested yet".to_string(),
-        severity: Severity::Error,
-    })
 }
 
 fn preview<'a>(

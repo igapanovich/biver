@@ -14,6 +14,7 @@ use crate::{Config, Error, temp_file};
 use chrono::Utc;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{Read, Seek};
+use std::ops::{Add, AddAssign};
 use std::path::{Path, PathBuf};
 use std::{fs, mem};
 use variantly::Variantly;
@@ -76,6 +77,10 @@ impl Session {
         };
 
         Ok(session)
+    }
+
+    pub fn versioned_file_path(&self) -> &Path {
+        self.paths.versioned_file()
     }
 
     pub fn tree(&self) -> &Tree {
@@ -141,7 +146,7 @@ impl Session {
 
             self.flush_tree()?;
 
-            let cleanup_result = self.remove_full_content_if_unused(parent_of_new_version_id);
+            let cleanup_result = self.cleanup_full_content_if_unused(parent_of_new_version_id);
 
             Ok(CommitResult::Ok(cleanup_result))
         })
@@ -166,6 +171,8 @@ impl Session {
             if versioned_file_xxh3_128 == head_version.xxh3_128 {
                 return Ok(AmendResult::NoUncommittedChanges);
             }
+
+            let former_head_id = head_version.id;
 
             let overwrite_result =
                 self.tree
@@ -216,7 +223,9 @@ impl Session {
 
             self.flush_tree()?;
 
-            let cleanup_result = if let Some(removed_version) = removed_version {
+            let mut cleanup_result = self.cleanup_full_content_if_unused(former_head_id);
+
+            cleanup_result += if let Some(removed_version) = removed_version {
                 self.cleanup_removed_version_content([removed_version])
             } else {
                 CleanupResult::Ok
@@ -370,6 +379,10 @@ impl Session {
                 return Ok(SoftResetResult::HeadBranchTipIsAlreadyThere);
             }
 
+            let former_head_id = self.tree.head_version_id();
+
+            let stop_at_version_extr_path = self.extraction_path(stop_at_version_id)?;
+
             let mut removed_versions = Vec::new();
 
             loop {
@@ -394,9 +407,15 @@ impl Session {
                 }
             }
 
+            let temp = temp_file::new_path();
+            self.extract_path(&stop_at_version_extr_path, &temp)?;
+            self.store_full_content(&temp, stop_at_version_id)?;
+            fs::remove_file(temp)?;
+
             self.flush_tree()?;
 
-            let cleanup_result = self.cleanup_removed_version_content(removed_versions);
+            let cleanup_result = self.cleanup_full_content_if_unused(former_head_id)
+                + self.cleanup_removed_version_content(removed_versions);
 
             Ok(SoftResetResult::Ok(cleanup_result))
         })
@@ -460,6 +479,10 @@ impl Session {
 
     pub fn remove_branch(&mut self, branch_name: &BranchName) -> Result<RemoveBranchResult> {
         use_break!(self, {
+            let Some(branch_tip_id) = self.tree.branch_tip_ids().get(branch_name).copied() else {
+                return Ok(RemoveBranchResult::BranchNotFound);
+            };
+
             let removed_versions = match self.tree.remove_branch(branch_name) {
                 Ok(ok) => ok.removed_versions,
                 Err(err) => {
@@ -477,7 +500,8 @@ impl Session {
 
             self.flush_tree()?;
 
-            let cleanup_result = self.cleanup_removed_version_content(removed_versions);
+            let cleanup_result = self.cleanup_full_content_if_unused(branch_tip_id)
+                + self.cleanup_removed_version_content(removed_versions);
 
             Ok(RemoveBranchResult::Ok(cleanup_result))
         })
@@ -667,7 +691,7 @@ impl Session {
         cleanup_result
     }
 
-    fn remove_full_content_if_unused(&self, version_id: VersionId) -> CleanupResult {
+    fn cleanup_full_content_if_unused(&self, version_id: VersionId) -> CleanupResult {
         if self.tree.is_branch_tip(version_id) {
             return CleanupResult::Ok;
         }
@@ -769,6 +793,23 @@ pub enum RemoveBranchResult {
 pub enum CleanupResult {
     Ok,
     Failed,
+}
+
+impl Add for CleanupResult {
+    type Output = CleanupResult;
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (CleanupResult::Failed, _) => CleanupResult::Failed,
+            (_, CleanupResult::Failed) => CleanupResult::Failed,
+            _ => CleanupResult::Ok,
+        }
+    }
+}
+
+impl AddAssign for CleanupResult {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
 }
 
 #[derive(Debug)]

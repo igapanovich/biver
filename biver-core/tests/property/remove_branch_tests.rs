@@ -2,7 +2,7 @@ use crate::helpers::arb::TestEnvOption::AtLeastTwoBranches;
 use crate::helpers::diff::Diff;
 use crate::helpers::extensions::{IdsExt, IndexExt, IteratorExt};
 use crate::helpers::snapshot::Snapshot;
-use crate::helpers::{arb, assert_version_content_integrity, set};
+use crate::helpers::{arb, assert_repository_integrity, set};
 use biver_core::repository::{CleanupResult, RemoveBranchResult};
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -41,7 +41,7 @@ proptest! {
         prop_assert_eq!(diff.removed_branches, set![branch_to_remove], "successful remove_branch only removes the target branch");
         prop_assert!(diff.upserted_branches.is_empty(), "successful remove_branch does not create branches");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -61,7 +61,7 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed remove_branch does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -88,7 +88,7 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed remove_branch does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -107,6 +107,6 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed remove_branch does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 }

@@ -1,6 +1,6 @@
 use crate::helpers::extensions::UnwrapExt;
 use crate::helpers::test_env::TestEnv;
-use crate::helpers::{arb, assert_version_content_integrity};
+use crate::helpers::{arb, assert_repository_integrity};
 use biver_core::repository;
 use proptest::option;
 use proptest::prelude::*;
@@ -33,6 +33,6 @@ proptest! {
         prop_assert_eq!(root_content, init_bytes.as_ref(), "root version has the same content as versioned file");
         prop_assert!(!session.has_uncommitted_changes()?, "init doesn't leave uncommitted changes");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 }

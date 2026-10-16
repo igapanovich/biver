@@ -1,7 +1,7 @@
 use crate::helpers::diff::Diff;
 use crate::helpers::snapshot::Snapshot;
 use crate::helpers::version_path::ResolveVersionPathExt;
-use crate::helpers::{arb, assert_version_content_integrity};
+use crate::helpers::{arb, assert_repository_integrity};
 use proptest::prelude::*;
 
 proptest! {
@@ -33,6 +33,6 @@ proptest! {
             prop_assert_eq!(&before.xxh3_128, &after.xxh3_128, "update_description does not modify version file content");
         }
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 }

@@ -1,5 +1,5 @@
 use crate::helpers::version_path::ResolveVersionPathExt;
-use crate::helpers::{arb, assert_version_content_integrity};
+use crate::helpers::{arb, assert_repository_integrity};
 use biver_core::data::Head;
 use biver_core::repository::CheckOutVersionResult;
 use proptest::prelude::*;
@@ -29,7 +29,7 @@ proptest! {
         prop_assert_eq!(&before.branches, &after.branches, "successful check_out_version does not modify branches");
         prop_assert_eq!(&before.versions, &after.versions, "successful check_out_version does not modify versions");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 
     #[test]
@@ -48,6 +48,6 @@ proptest! {
 
         prop_assert_eq!(before, after, "failed check_out_version does not modify anything");
 
-        assert_version_content_integrity(session)?;
+        assert_repository_integrity(session)?;
     }
 }
