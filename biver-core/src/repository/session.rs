@@ -59,6 +59,7 @@ impl Session {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(paths.lock_file())?;
 
         if let Err(err) = lock.try_lock() {
@@ -139,7 +140,7 @@ impl Session {
             if let Some(preview_command) = &self.config.preview_command {
                 create_preview(
                     preview_command,
-                    &self.paths.versioned_file(),
+                    self.paths.versioned_file(),
                     &self.paths.version_preview_file(new_version_id),
                 )?;
             }
@@ -216,7 +217,7 @@ impl Session {
             if let Some(preview_command) = &self.config.preview_command {
                 create_preview(
                     preview_command,
-                    &self.paths.versioned_file(),
+                    self.paths.versioned_file(),
                     &self.paths.version_preview_file(new_version_id),
                 )?;
             }
@@ -347,7 +348,7 @@ impl Session {
             }
 
             let extr_path = self.extraction_path(version_id)?;
-            self.extract_path(&extr_path, &destination)?;
+            self.extract_path(&extr_path, destination)?;
 
             Ok(RestoreVersionResult::Ok)
         })
@@ -567,7 +568,7 @@ impl Session {
 
     fn extraction_path(&self, version_id: VersionId) -> Result<ExtractionPath> {
         let mut chains = self.tree.branch_tip_to_version_chains(version_id);
-        chains.sort_unstable_by(|a, b| a.len().cmp(&b.len()));
+        chains.sort_unstable_by_key(|a| a.len());
 
         let chain = chains
             .first()
@@ -606,11 +607,11 @@ impl Session {
         fs::copy(&path.starting_full, actual)?;
 
         for patch_path in &path.patches {
-            if fs::exists(&stale)? {
-                fs::remove_file(&stale)?;
+            if fs::exists(stale)? {
+                fs::remove_file(stale)?;
             }
 
-            external_diff_command::apply_patch(&self.config, &actual, patch_path, &stale)?;
+            external_diff_command::apply_patch(&self.config, actual, patch_path, stale)?;
             mem::swap(&mut actual, &mut stale);
         }
 
@@ -706,7 +707,7 @@ impl Session {
     }
 
     fn versioned_file_xxh3_128(&self) -> Result<u128> {
-        let value = xxh3_128::from_file_path(&self.paths.versioned_file())?;
+        let value = xxh3_128::from_file_path(self.paths.versioned_file())?;
         Ok(value)
     }
 }

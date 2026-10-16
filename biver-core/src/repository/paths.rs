@@ -23,7 +23,7 @@ pub struct Paths {
 
 impl Paths {
     pub fn new(versioned_file_path: &Path) -> Self {
-        let repository_dir = repository_dir(&versioned_file_path);
+        let repository_dir = repository_dir(versioned_file_path);
         let backup_dir = repository_dir.join("backup");
 
         Paths {

@@ -1,6 +1,7 @@
 use biver_core::data::{BranchName, VersionId};
 use biver_core::repository::Session;
 use itertools::Itertools;
+use std::cmp;
 use std::str::FromStr;
 
 pub const UNCOMMITTED_CHANGES_EXPRESSION: &str = "*";
@@ -69,10 +70,10 @@ fn resolve_as_relative_to_head_expr(session: &Session, expr: &str) -> Option<Ver
         return Some(session.tree().head_version().id);
     }
 
-    if let Ok(offset) = usize::from_str(&expr[1..]) {
-        if let Some(version) = session.tree().head_and_ancestors().skip(offset).next() {
-            return Some(version.id);
-        }
+    if let Ok(offset) = usize::from_str(&expr[1..])
+        && let Some(version) = session.tree().head_and_ancestors().nth(offset)
+    {
+        return Some(version.id);
     }
 
     None
@@ -92,12 +93,11 @@ fn resolve_as_branch_name(session: &Session, branch_name: &str) -> Option<Branch
 
 fn resolve_as_nickname(session: &Session, nickname: &str) -> Option<VersionId> {
     let mut versions = session.tree().versions().collect_vec();
-    versions.sort_by(|a, b| b.creation_time.cmp(&a.creation_time));
+    versions.sort_by_key(|v| cmp::Reverse(&v.creation_time));
 
     if let Some(version) = versions
         .iter()
-        .filter(|v| nickname_matches(&v.nickname(), nickname))
-        .next()
+        .find(|v| nickname_matches(&v.nickname(), nickname))
     {
         return Some(version.id);
     }
@@ -138,11 +138,11 @@ fn nickname_matches(nickname: &str, tested_str: &str) -> bool {
             return false;
         }
 
-        let input_initials_first = tested_str.chars().nth(0).unwrap();
+        let input_initials_first = tested_str.chars().next().unwrap();
         let input_initials_second = tested_str.chars().nth(1).unwrap();
 
         let index_of_dash = nickname.find('-').unwrap();
-        let nickname_initials_first = nickname.chars().nth(0).unwrap();
+        let nickname_initials_first = nickname.chars().next().unwrap();
         let nickname_initials_second = nickname.chars().nth(index_of_dash + 1).unwrap();
 
         input_initials_first.eq_ignore_ascii_case(&nickname_initials_first)

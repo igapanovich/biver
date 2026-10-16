@@ -85,14 +85,12 @@ pub fn error<T>(message: impl Into<String>) -> Result<T> {
     Err(Error {
         message: message.into(),
         severity: Severity::Error,
-    }
-    .into())
+    })
 }
 
 pub fn warning<T>(message: impl Into<String>) -> Result<T> {
     Err(Error {
         message: message.into(),
         severity: Severity::Warning,
-    }
-    .into())
+    })
 }

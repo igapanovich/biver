@@ -13,7 +13,7 @@ impl BranchName {
     }
 
     pub fn new_cloned(branch_name: &str) -> Result<Self, ValidationError> {
-        match Self::validate(&branch_name) {
+        match Self::validate(branch_name) {
             Ok(()) => Ok(BranchName(branch_name.to_string())),
             Err(e) => Err(e),
         }

@@ -15,11 +15,11 @@ pub fn write_tree(paths: &Paths, tree: &Tree) -> Result<()> {
     let backup4 = paths.tree_backup4_file();
     let backup5 = paths.tree_backup5_file();
 
-    rotate_backup(&backup4, &backup5, Duration::from_hours(24))?;
-    rotate_backup(&backup3, &backup4, Duration::from_hours(5))?;
-    rotate_backup(&backup2, &backup3, Duration::from_hours(1))?;
-    rotate_backup(&backup1, &backup2, Duration::from_mins(5))?;
-    rotate_backup(paths.tree_file(), &backup1, Duration::from_secs(10))?;
+    rotate_backup(backup4, backup5, Duration::from_hours(24))?;
+    rotate_backup(backup3, backup4, Duration::from_hours(5))?;
+    rotate_backup(backup2, backup3, Duration::from_hours(1))?;
+    rotate_backup(backup1, backup2, Duration::from_mins(5))?;
+    rotate_backup(paths.tree_file(), backup1, Duration::from_secs(10))?;
 
     let using_tmp = fs::exists(paths.tree_file())?;
     let tree_tmp_path = paths.tree_file().with_extension(".tmp");

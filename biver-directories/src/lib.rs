@@ -16,7 +16,7 @@ pub fn runtime() -> Result<PathBuf, GetProjectDirsError> {
 }
 
 fn project_dirs() -> Result<ProjectDirs, GetProjectDirsError> {
-    ProjectDirs::from("", "", "biver").ok_or_else(|| GetProjectDirsError)
+    ProjectDirs::from("", "", "biver").ok_or(GetProjectDirsError)
 }
 
 #[derive(Debug)]

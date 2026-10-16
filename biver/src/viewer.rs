@@ -29,13 +29,13 @@ pub fn show_comparison<R: Read + Seek>(
     let image2 = egui_image(image2)?;
 
     eframe::run_native(
-        &description1,
+        description1,
         egui_options(),
         Box::new(|cc| {
             Ok(Box::new(ComparerApp::new(
                 cc,
                 image1,
-                &description1,
+                description1,
                 image2,
                 description2,
             )))

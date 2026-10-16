@@ -273,10 +273,10 @@ mod prepared {
             let branches_on_version = branches_by_version.get(&version.id);
 
             if let Some(branches_on_version) = branches_on_version {
-                forking_branches.retain(|b| !branches_on_version.contains(&b));
+                forking_branches.retain(|b| !branches_on_version.contains(b));
             }
 
-            let forking_branches = if forking_branches.len() > 0 {
+            let forking_branches = if !forking_branches.is_empty() {
                 Some(format!(
                     "->[{}]",
                     forking_branches.iter().map(|b| b.as_str()).join(", ")
@@ -311,7 +311,7 @@ mod prepared {
                         }
                     };
 
-                    if branches_on_version.len() == 0 {
+                    if branches_on_version.is_empty() {
                         None
                     } else {
                         Some(format!(
@@ -334,7 +334,7 @@ mod prepared {
                 head_badge,
                 other_branches_here,
                 forking_branches,
-                description: if version.description.len() > 0 {
+                description: if !version.description.is_empty() {
                     Some(version.description.to_string())
                 } else {
                     None
@@ -352,11 +352,7 @@ mod prepared {
 
         let total_version_count = versions_to_prepare.len();
 
-        let off_screen_version_count = if total_version_count > limit_from_end {
-            total_version_count - limit_from_end
-        } else {
-            0
-        };
+        let off_screen_version_count = total_version_count.saturating_sub(limit_from_end);
 
         let version_id_position = max_creation_time_humanized_length + 21;
 
@@ -370,7 +366,7 @@ mod prepared {
                 - more_versions_text.len().min(more_versions_slot_length)
                 + 1;
 
-            let forking_branches = if off_screen_branches.len() == 0 {
+            let forking_branches = if off_screen_branches.is_empty() {
                 None
             } else {
                 Some(format!(

@@ -17,7 +17,7 @@ where
         ));
     };
 
-    let mut command = Command::new(command.as_ref().to_string());
+    let mut command = Command::new(command.as_ref());
 
     loop {
         let Some(arg) = command_template.next() else {
@@ -55,15 +55,12 @@ fn render_template(
         match part {
             TemplatePart::Literal(l) => result.push_str(l),
             TemplatePart::Variable(name) => {
-                let Some(value) = template_values
+                let value = template_values
                     .iter()
                     .filter_map(|(k, v)| if k == &name { Some(v) } else { None })
-                    .next()
-                else {
-                    return None;
-                };
+                    .next()?;
 
-                result.push_str(&value);
+                result.push_str(value);
             }
         }
     }
@@ -78,9 +75,7 @@ enum TemplatePart<'a> {
 }
 
 fn parse_template(template: &str) -> Option<Vec<TemplatePart<'_>>> {
-    let Some((start, end)) = find_square_bracket_seg(template, 0) else {
-        return None;
-    };
+    let (start, end) = find_square_bracket_seg(template, 0)?;
 
     let mut result = Vec::new();
 
@@ -155,7 +150,7 @@ fn process_output_to_result(output: Output) -> Result<()> {
         message.push_str(&String::from_utf8(output.stderr)?);
     }
 
-    Err(Error::ExternalCommand(message).into())
+    Err(Error::ExternalCommand(message))
 }
 
 #[cfg(test)]

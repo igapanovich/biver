@@ -430,15 +430,11 @@ fn core_config(versioned_file_extension: Option<&OsStr>) -> Result<biver_core::C
     let default = global_config.default_file_type_rules;
 
     let file_rule = if let Some(versioned_file_extension) = versioned_file_extension {
-        global_config
-            .file_type_rules
-            .into_iter()
-            .filter(|fr| {
-                fr.extensions
-                    .iter()
-                    .any(|e| OsString::from(e) == versioned_file_extension)
-            })
-            .next()
+        global_config.file_type_rules.into_iter().find(|fr| {
+            fr.extensions
+                .iter()
+                .any(|e| OsString::from(e) == versioned_file_extension)
+        })
     } else {
         None
     };

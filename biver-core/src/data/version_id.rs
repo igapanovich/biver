@@ -32,3 +32,9 @@ impl Display for VersionId {
         self.0.fmt(f)
     }
 }
+
+impl Default for VersionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}

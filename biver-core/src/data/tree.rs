@@ -173,17 +173,14 @@ impl Tree {
     }
 
     pub fn branch_names(&self) -> impl Iterator<Item = &BranchName> {
-        self.branches.keys().into_iter()
+        self.branches.keys()
     }
 
     pub fn branch_tip_and_ancestors<'a>(
         &'a self,
         branch_name: &'a BranchName,
     ) -> Option<impl Iterator<Item = &'a Version>> {
-        let Some(branch_tip_id) = self.branches.get(branch_name).copied() else {
-            return None;
-        };
-
+        let branch_tip_id = self.branches.get(branch_name).copied()?;
         self.version_and_ancestors(branch_tip_id)
     }
 
@@ -191,9 +188,7 @@ impl Tree {
         &'a self,
         branch_name: &'a BranchName,
     ) -> Option<impl Iterator<Item = &'a Version>> {
-        let Some(branch_tip_id) = self.branches.get(branch_name).copied() else {
-            return None;
-        };
+        let branch_tip_id = self.branches.get(branch_name).copied()?;
 
         Some(BranchTipAndAncestorsExclusive {
             tree: self,
@@ -615,10 +610,9 @@ impl<'a> Iterator for VersionAndAncestors<'a> {
     type Item = &'a Version;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Some(current_version) = self.current_version_id.and_then(|id| self.tree.version(id))
-        else {
-            return None;
-        };
+        let current_version = self
+            .current_version_id
+            .and_then(|id| self.tree.version(id))?;
 
         self.current_version_id = current_version.parent_id;
 
@@ -637,10 +631,9 @@ impl<'a> Iterator for BranchTipAndAncestorsExclusive<'a> {
     type Item = &'a Version;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Some(current_version) = self.current_version_id.and_then(|id| self.tree.version(id))
-        else {
-            return None;
-        };
+        let current_version = self
+            .current_version_id
+            .and_then(|id| self.tree.version(id))?;
 
         let children_check_count = if self.at_branch_tip { 1 } else { 2 };
 

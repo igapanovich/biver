@@ -11,8 +11,3 @@
 # 0.2
 
 - GUI
-
-# Backlog
-
-- Support matching file type rules by mime type
-- Use clippy

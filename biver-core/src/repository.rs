@@ -19,6 +19,7 @@ mod session;
 
 const SCHEMA_VERSION: u32 = 1;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Variantly)]
 pub enum TryStartSessionResult {
     Ok(Session),
@@ -85,12 +86,12 @@ pub fn initialize(
     let root_id = tree.head_version_id();
 
     let content_blob_file_path = paths.version_full_content_file(root_id);
-    fs::copy(&paths.versioned_file(), &content_blob_file_path)?;
+    fs::copy(paths.versioned_file(), &content_blob_file_path)?;
 
     if let Some(preview_command) = config.preview_command {
         create_preview(
             &preview_command,
-            &paths.versioned_file(),
+            paths.versioned_file(),
             &paths.version_preview_file(root_id),
         )?;
     }
