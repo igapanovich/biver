@@ -69,8 +69,6 @@ proptest! {
     fn restore_version_into_repository_properties(env in arb::env_with_opts(&[NoUncommittedChanges]), version_path in arb::version_path(), sub_path in option::of(arb::fs_path())) {
         let session = env.start_session();
 
-        println!("{:?}", sub_path);
-
         let paths = Paths::new(env.versioned_file_path());
 
         let target_path = if let Some(sub_path) = sub_path {

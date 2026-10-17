@@ -1,7 +1,7 @@
 use crate::data::tree::{
     AddBranchError, MoveHeadToBranchError, MoveHeadToVersionError, NewVersion,
-    OverwriteBranchTipError, OverwriteBranchTipOutcome, PopBranchOutcome, RemoveBranchError,
-    RenameBranchError, VersionUpdate,
+    OverwriteBranchTipError, OverwriteBranchTipOutcome, PopBranchOutcome, RebaseBranchError,
+    RemoveBranchError, RenameBranchError, VersionUpdate,
 };
 use crate::data::{BranchName, Tree, Version, VersionId};
 use crate::error::Result;
@@ -422,6 +422,98 @@ impl Session {
         })
     }
 
+    pub fn rebase(
+        &mut self,
+        rebased_version_id: VersionId,
+        new_parent_id: VersionId,
+    ) -> Result<RebaseResult> {
+        if self.tree.version(rebased_version_id).is_none() {
+            return Ok(RebaseResult::InvalidRebasedVersion);
+        }
+
+        if self.tree.version(new_parent_id).is_none() {
+            return Ok(RebaseResult::InvalidNewParentVersion);
+        }
+
+        let Some(head_branch) = self.tree.head_branch().cloned() else {
+            return Ok(RebaseResult::HeadMustBeOnBranch);
+        };
+
+        let rebased_version_extr_path = self.extraction_path(rebased_version_id)?;
+        let new_parent_extr_path = self.extraction_path(new_parent_id)?;
+
+        let rebase_outcome =
+            match self
+                .tree
+                .rebase_branch(&head_branch, rebased_version_id, new_parent_id)
+            {
+                Ok(rebase_outcome) => rebase_outcome,
+                Err(err) => {
+                    return Ok(match err {
+                        RebaseBranchError::BranchNotFound => panic!("Head branch not found"),
+                        RebaseBranchError::RebasedVersionNotFound => {
+                            RebaseResult::InvalidRebasedVersion
+                        }
+                        RebaseBranchError::NewParentVersionNotFound => {
+                            RebaseResult::InvalidNewParentVersion
+                        }
+                        RebaseBranchError::CannotRebaseRoot => RebaseResult::CannotRebaseRoot,
+                        RebaseBranchError::RebasedVersionDoesNotBelongToBranch => {
+                            RebaseResult::RebasedVersionDoesNotBelongToHeadBranch
+                        }
+                    });
+                }
+            };
+
+        let new_rebased_version_id = rebase_outcome
+            .copied_versions
+            .iter()
+            .find(|c| c.old_id == rebased_version_id)
+            .expect("Rebased version must be copied")
+            .new_id;
+
+        let new_parent_content_tmp = temp_file::new_path();
+        let rebased_version_content_tmp = temp_file::new_path();
+        self.extract_path(&new_parent_extr_path, &new_parent_content_tmp)?;
+        self.extract_path(&rebased_version_extr_path, &rebased_version_content_tmp)?;
+        self.store_reverse_patch(
+            new_rebased_version_id,
+            &rebased_version_content_tmp,
+            &new_parent_content_tmp,
+        )?;
+        fs::remove_file(new_parent_content_tmp)?;
+        fs::remove_file(rebased_version_content_tmp)?;
+
+        let new_branch_tip_id = self.tree.head_branch_tip().expect("Validated above").id;
+
+        for copied in &rebase_outcome.copied_versions {
+            if copied.old_id != rebased_version_id {
+                let old_reverse_patch = self.paths.version_reverse_patch_file(copied.old_id);
+                let new_reverse_patch = self.paths.version_reverse_patch_file(copied.new_id);
+
+                fs::copy(old_reverse_patch, new_reverse_patch)?;
+            }
+
+            if copied.new_id == new_branch_tip_id {
+                let old_full_content = self.paths.version_full_content_file(copied.old_id);
+                let new_full_content = self.paths.version_full_content_file(copied.new_id);
+
+                fs::copy(old_full_content, new_full_content)?;
+            }
+        }
+
+        self.flush_tree()?;
+
+        let mut cleanup_result =
+            self.cleanup_removed_version_content(rebase_outcome.removed_versions);
+
+        for copied in rebase_outcome.copied_versions {
+            cleanup_result += self.cleanup_full_content_if_unused(copied.old_id);
+        }
+
+        Ok(RebaseResult::Ok(cleanup_result))
+    }
+
     pub fn create_branch(
         &mut self,
         branch_name: BranchName,
@@ -480,7 +572,7 @@ impl Session {
 
     pub fn remove_branch(&mut self, branch_name: &BranchName) -> Result<RemoveBranchResult> {
         use_break!(self, {
-            let Some(branch_tip_id) = self.tree.branch_tip_ids().get(branch_name).copied() else {
+            let Some(branch_tip_id) = self.tree.branch_tip_map().get(branch_name).copied() else {
                 return Ok(RemoveBranchResult::BranchNotFound);
             };
 
@@ -711,6 +803,14 @@ impl Session {
 
         let path = self.paths.version_full_content_file(version_id);
 
+        let Ok(exists) = fs::exists(&path) else {
+            return CleanupResult::Failed;
+        };
+
+        if !exists {
+            return CleanupResult::Ok;
+        }
+
         if fs::remove_file(path).is_ok() {
             CleanupResult::Ok
         } else {
@@ -770,6 +870,16 @@ pub enum SoftResetResult {
     HeadBranchTipIsAlreadyThere,
     HeadMustBeOnBranch,
     InvalidStopAtVersionId,
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
+pub enum RebaseResult {
+    Ok(CleanupResult),
+    HeadMustBeOnBranch,
+    InvalidRebasedVersion,
+    InvalidNewParentVersion,
+    CannotRebaseRoot,
+    RebasedVersionDoesNotBelongToHeadBranch,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]

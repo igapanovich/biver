@@ -6,8 +6,8 @@ use biver_core::data::BranchName;
 use biver_core::repository;
 use biver_core::repository::{
     AmendResult, CheckOutBranchResult, CheckOutVersionResult, CommitResult, CreateBranchResult,
-    InitializeResult, RemoveBranchResult, RenameBranchResult, RestoreVersionResult, Session,
-    SoftResetResult, TryStartSessionResult, UpdateDescriptionResult,
+    InitializeResult, RebaseResult, RemoveBranchResult, RenameBranchResult, RestoreVersionResult,
+    Session, SoftResetResult, TryStartSessionResult, UpdateDescriptionResult,
 };
 use clap::Parser;
 use colored::Colorize;
@@ -243,6 +243,45 @@ fn run_command(command: Command) -> Result<()> {
                 }
                 SoftResetResult::HeadMustBeOnBranch => error("Head must be on a branch"),
                 SoftResetResult::InvalidStopAtVersionId => error("Invalid reset range"),
+            }
+        }
+
+        Command::Rebase {
+            versioned_file_path,
+            confirmed,
+            rebased_version,
+            new_parent,
+        } => {
+            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+
+            if !confirmed {
+                println!("Are you sure you want to rebase the current branch? (y/N)");
+                let confirmed = read_yes_no_input()?.unwrap_or(false);
+                if !confirmed {
+                    return success();
+                }
+            }
+
+            let Some(rebased_version_id) = target_expression::resolve_as_bs58(&rebased_version)
+            else {
+                return error("Invalid rebased version");
+            };
+
+            let Some(new_parent_id) = target_expression::resolve_as_bs58(&new_parent) else {
+                return error("Invalid new parent");
+            };
+
+            let result = session.rebase(rebased_version_id, new_parent_id)?;
+
+            match result {
+                RebaseResult::Ok(_) => success_ok(),
+                RebaseResult::InvalidRebasedVersion => error("Invalid rebased version"),
+                RebaseResult::InvalidNewParentVersion => error("Invalid new parent"),
+                RebaseResult::CannotRebaseRoot => error("Cannot rebase root"),
+                RebaseResult::RebasedVersionDoesNotBelongToHeadBranch => {
+                    error("Rebased version must belong to the head branch")
+                }
+                RebaseResult::HeadMustBeOnBranch => error("Head must point at a branch"),
             }
         }
 

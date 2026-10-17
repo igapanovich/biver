@@ -25,6 +25,7 @@ pub enum TestEnvOption {
     HeadOnVersion,
     AtLeastTwoBranches,
     SingleBranch,
+    AtLeastTwoVersions,
 }
 
 pub fn env_with_opts(options: &[TestEnvOption]) -> impl Strategy<Value = TestEnv> {
@@ -111,6 +112,12 @@ fn repository_blueprint(options: &[TestEnvOption]) -> impl Strategy<Value = Repo
         option::of(vec(file_operation(), 1..=4)).boxed()
     };
 
+    let min_initial_branch_version_count = if options.contains(&TestEnvOption::AtLeastTwoVersions) {
+        2
+    } else {
+        1
+    };
+
     let other_branches = if options.contains(&TestEnvOption::AtLeastTwoBranches) {
         vec(branch_blueprint(), 1..=4).boxed()
     } else if options.contains(&TestEnvOption::SingleBranch) {
@@ -120,7 +127,7 @@ fn repository_blueprint(options: &[TestEnvOption]) -> impl Strategy<Value = Repo
     };
 
     (
-        initial_branch_blueprint(),
+        initial_branch_blueprint(min_initial_branch_version_count),
         other_branches,
         head,
         uncommitted_changes,
@@ -150,14 +157,22 @@ fn head_version_blueprint() -> impl Strategy<Value = HeadBlueprint> {
     version_path().prop_map(HeadBlueprint::Version)
 }
 
-fn initial_branch_blueprint() -> impl Strategy<Value = InitialBranchBlueprint> {
-    (option::of(branch_name()), vec(version_blueprint(), 1..=8)).prop_map(|(name, mut versions)| {
-        InitialBranchBlueprint {
+fn initial_branch_blueprint(
+    min_version_count: usize,
+) -> impl Strategy<Value = InitialBranchBlueprint> {
+    if min_version_count >= 9 {
+        panic!("min_version_count should be below 9");
+    }
+
+    (
+        option::of(branch_name()),
+        vec(version_blueprint(), min_version_count..=8),
+    )
+        .prop_map(|(name, mut versions)| InitialBranchBlueprint {
             name,
             first_version: versions.remove(0),
             following_versions: versions,
-        }
-    })
+        })
 }
 
 fn branch_blueprint() -> impl Strategy<Value = BranchBlueprint> {

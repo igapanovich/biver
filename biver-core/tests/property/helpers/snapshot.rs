@@ -19,7 +19,7 @@ impl Snapshot {
             versioned_file_content: fs::read(&versioned_file_path).unwrap(),
             has_uncommitted_changes: session.has_uncommitted_changes().unwrap(),
             head: session.tree().head().clone(),
-            branches: session.tree().branch_tip_ids().clone(),
+            branches: session.tree().branch_tip_map().clone(),
             versions: session.tree().versions().cloned().collect(),
         }
     }

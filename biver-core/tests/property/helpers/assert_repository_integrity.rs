@@ -20,7 +20,7 @@ fn assert_full_content_dir_integrity(
 ) -> Result<(), TestCaseError> {
     let branch_tip_full_contents = session
         .tree()
-        .branch_tip_ids()
+        .branch_tip_map()
         .values()
         .map(|id| paths.version_full_content_file(*id))
         .collect_set();

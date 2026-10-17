@@ -217,7 +217,7 @@ mod prepared {
         let head_version_ids: Vec<VersionId> = tree.head_and_ancestors().map(|v| v.id).collect();
 
         let branches_forking_at_version_id: HashMap<VersionId, Vec<&BranchName>> = tree
-            .branch_tip_ids()
+            .branch_tip_map()
             .iter()
             .map(|(branch, branch_tip_id)| {
                 let join_version_id = tree
@@ -235,7 +235,7 @@ mod prepared {
             });
 
         let branches_by_version: HashMap<VersionId, Vec<&BranchName>> = tree
-            .branch_tip_ids()
+            .branch_tip_map()
             .iter()
             .fold(HashMap::new(), |mut acc, (branch, branch_tip_id)| {
                 acc.entry(*branch_tip_id)

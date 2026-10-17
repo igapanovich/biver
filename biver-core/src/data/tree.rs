@@ -3,7 +3,7 @@ use crate::utilities::extensions::CountIsAtLeast;
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use variantly::Variantly;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -15,13 +15,7 @@ pub struct Tree {
 
 impl Tree {
     pub fn new(branch_name: BranchName, root_version: NewVersion) -> Tree {
-        let root_version = Version {
-            id: VersionId::new(),
-            creation_time: root_version.creation_time,
-            xxh3_128: root_version.xxh3_128,
-            description: root_version.description,
-            parent_id: None,
-        };
+        let root_version = Self::new_version(None, root_version);
 
         Tree {
             head: Head::Branch(branch_name.clone()),
@@ -132,11 +126,20 @@ impl Tree {
             versions_belonging_to_branches.len() == self.versions.len()
         };
 
+        let there_are_no_id_duplicates = self
+            .versions
+            .iter()
+            .map(|v| v.id)
+            .collect::<HashSet<_>>()
+            .len()
+            == self.versions.len();
+
         there_is_exactly_one_root
             && all_parent_references_are_valid
             && head_reference_is_valid
             && all_branches_reference_valid_versions
             && all_versions_belong_to_branches
+            && there_are_no_id_duplicates
     }
 
     pub fn version_and_ancestors(
@@ -164,7 +167,7 @@ impl Tree {
             .filter(move |v| v.parent_id == Some(version_id))
     }
 
-    pub fn branch_tip_ids(&self) -> &HashMap<BranchName, VersionId> {
+    pub fn branch_tip_map(&self) -> &HashMap<BranchName, VersionId> {
         &self.branches
     }
 
@@ -232,15 +235,8 @@ impl Tree {
             return Err(ExtendBranchError::BranchNotFound);
         };
 
-        let id = VersionId::new();
-
-        let new_version = Version {
-            id,
-            creation_time: new_version.creation_time,
-            xxh3_128: new_version.xxh3_128,
-            description: new_version.description,
-            parent_id: Some(*branch_tip_id),
-        };
+        let new_version = Self::new_version(Some(*branch_tip_id), new_version);
+        let id = new_version.id;
 
         self.versions.push(new_version);
         *branch_tip_id = id;
@@ -280,16 +276,7 @@ impl Tree {
         let former_branch_tip_id = *branch_tip_id;
         *branch_tip_id = parent_id;
 
-        let has_children = self.children(former_branch_tip_id).count_is_at_least(1);
-        let is_tip_of_another_branch = self
-            .branches
-            .iter()
-            .find(|(b, id)| *b != branch_name && **id == former_branch_tip_id)
-            .is_some();
-
-        let still_in_use = has_children || is_tip_of_another_branch;
-
-        if still_in_use {
+        if self.belongs_to_some_branch(former_branch_tip_id) {
             Ok(PopBranchOutcome::PoppedVersionStillInUse {
                 former_tip_id: former_branch_tip_id,
                 new_tip_id: parent_id,
@@ -336,15 +323,9 @@ impl Tree {
 
         let former_branch_tip_id = former_branch_tip.id;
 
-        let new_branch_tip_id = VersionId::new();
         let new_branch_tip = create_new_version(former_branch_tip);
-        let new_branch_tip = Version {
-            id: new_branch_tip_id,
-            creation_time: new_branch_tip.creation_time,
-            xxh3_128: new_branch_tip.xxh3_128,
-            description: new_branch_tip.description,
-            parent_id: former_branch_tip.parent_id,
-        };
+        let new_branch_tip = Self::new_version(former_branch_tip.parent_id, new_branch_tip);
+        let new_branch_tip_id = new_branch_tip.id;
 
         *branch_tip_id = new_branch_tip.id;
 
@@ -376,6 +357,70 @@ impl Tree {
                 former_tip: former_branch_tip_version,
             })
         }
+    }
+
+    pub(crate) fn rebase_branch(
+        &mut self,
+        branch_name: &BranchName,
+        rebased_version_id: VersionId,
+        new_parent_id: VersionId,
+    ) -> Result<RebaseBranchOutcome, RebaseBranchError> {
+        if !self.branches.contains_key(branch_name) {
+            return Err(RebaseBranchError::BranchNotFound);
+        }
+
+        if self.version(rebased_version_id).is_none() {
+            return Err(RebaseBranchError::RebasedVersionNotFound);
+        }
+
+        if self.version(new_parent_id).is_none() {
+            return Err(RebaseBranchError::NewParentVersionNotFound);
+        }
+
+        if rebased_version_id == self.root_version().id {
+            return Err(RebaseBranchError::CannotRebaseRoot);
+        }
+
+        let rebased_range = self
+            .branch_tip_and_ancestors(branch_name)
+            .expect("Already validated branch name")
+            .take_while_inclusive(|v| v.id != rebased_version_id)
+            .collect_vec();
+
+        if rebased_range.iter().all(|v| v.id != rebased_version_id) {
+            return Err(RebaseBranchError::RebasedVersionDoesNotBelongToBranch);
+        }
+
+        let mut copied_versions = Vec::new();
+        let mut copy_mappings = Vec::new();
+        let mut current_rebase_parent_id = new_parent_id;
+        for v in rebased_range.iter().rev() {
+            let v_copy = Self::copy_version(Some(current_rebase_parent_id), v);
+            let v_copy_id = v_copy.id;
+
+            copy_mappings.push(CopiedVersion {
+                new_id: v_copy_id,
+                old_id: v.id,
+            });
+
+            copied_versions.push(v_copy);
+            current_rebase_parent_id = v_copy_id;
+        }
+
+        self.versions.extend(copied_versions);
+
+        let branch_tip_id = self
+            .branches
+            .get_mut(branch_name)
+            .expect("Already validated branch name");
+        *branch_tip_id = current_rebase_parent_id;
+
+        let removed_versions = self.remove_unreachable_versions();
+
+        Ok(RebaseBranchOutcome {
+            removed_versions,
+            copied_versions: copy_mappings,
+        })
     }
 
     pub(crate) fn update_version(&mut self, id: VersionId, update: VersionUpdate) -> bool {
@@ -513,6 +558,81 @@ impl Tree {
             .enumerate()
             .find_map(|(i, v)| if v.id == id { Some(i) } else { None })
     }
+
+    fn new_version(parent_id: Option<VersionId>, new_version: NewVersion) -> Version {
+        Version {
+            id: VersionId::new(),
+            creation_time: new_version.creation_time,
+            xxh3_128: new_version.xxh3_128,
+            description: new_version.description,
+            parent_id,
+        }
+    }
+
+    fn copy_version(parent_id: Option<VersionId>, source_version: &Version) -> Version {
+        Version {
+            id: VersionId::new(),
+            creation_time: source_version.creation_time,
+            xxh3_128: source_version.xxh3_128,
+            description: source_version.description.clone(),
+            parent_id,
+        }
+    }
+
+    fn belongs_to_some_branch(&self, version_id: VersionId) -> bool {
+        let branch_tip_ids = self.branches.values().copied().collect_vec();
+
+        let mut to_check = vec![version_id];
+
+        while !to_check.is_empty() {
+            let mut current = Vec::new();
+            std::mem::swap(&mut to_check, &mut current);
+            for id in current {
+                if branch_tip_ids.contains(&id) {
+                    return true;
+                }
+
+                for c in self.children(id) {
+                    to_check.push(c.id);
+                }
+            }
+        }
+
+        false
+    }
+
+    fn remove_unreachable_versions(&mut self) -> Vec<Version> {
+        let mut reachable_ids: HashSet<VersionId> =
+            HashSet::from_iter(self.branches.values().copied());
+
+        let mut to_check_parents = VecDeque::from_iter(self.branches.values().copied());
+
+        while let Some(id) = to_check_parents.pop_front() {
+            let parent_id = self
+                .versions
+                .iter()
+                .find(|v| v.id == id)
+                .and_then(|v| v.parent_id);
+
+            let Some(parent_id) = parent_id else {
+                continue;
+            };
+
+            if reachable_ids.insert(parent_id) {
+                to_check_parents.push_back(parent_id);
+            }
+        }
+
+        let mut removed = Vec::new();
+
+        for i in (0..self.versions.len() - 1).rev() {
+            if !reachable_ids.contains(&self.versions[i].id) {
+                removed.push(self.versions.remove(i));
+            }
+        }
+
+        removed
+    }
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
@@ -590,6 +710,21 @@ pub enum RemoveBranchError {
     CannotRemoveHeadVersion,
 }
 
+#[derive(Debug, Clone)]
+pub struct RebaseBranchOutcome {
+    pub removed_versions: Vec<Version>,
+    pub copied_versions: Vec<CopiedVersion>,
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Variantly)]
+pub enum RebaseBranchError {
+    BranchNotFound,
+    RebasedVersionNotFound,
+    RebasedVersionDoesNotBelongToBranch,
+    NewParentVersionNotFound,
+    CannotRebaseRoot,
+}
+
 pub struct NewVersion {
     pub creation_time: DateTime<Utc>,
     pub xxh3_128: u128,
@@ -599,6 +734,12 @@ pub struct NewVersion {
 #[derive(Default)]
 pub struct VersionUpdate {
     pub description: Option<String>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct CopiedVersion {
+    pub old_id: VersionId,
+    pub new_id: VersionId,
 }
 
 struct VersionAndAncestors<'a> {

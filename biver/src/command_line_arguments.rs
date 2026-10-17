@@ -118,6 +118,22 @@ pub enum Command {
         target: String,
     },
 
+    /// Rebase the current branch starting from rebased version to the new parent
+    Rebase {
+        #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
+        versioned_file_path: PathBuf,
+
+        /// Do not ask for confirmation
+        #[arg(short = 'y', long = "yes")]
+        confirmed: bool,
+
+        /// Start of the range of versions that will be rebased
+        rebased_version: String,
+
+        /// Where to rebase
+        new_parent: String,
+    },
+
     /// Check out a specific branch or version
     Checkout {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]

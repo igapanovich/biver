@@ -50,7 +50,7 @@ pub fn resolve_branch_or_version(session: &Session, target_expr: &str) -> Option
 pub fn resolve_version(session: &Session, target_expr: &str) -> Option<VersionId> {
     match resolve_branch_or_version(session, target_expr) {
         Some(BranchOrVersion::Branch(branch_name)) => {
-            Some(session.tree().branch_tip_ids()[&branch_name])
+            Some(session.tree().branch_tip_map()[&branch_name])
         }
         Some(BranchOrVersion::Version(version_id)) => Some(version_id),
         None => None,
