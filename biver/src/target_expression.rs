@@ -4,7 +4,7 @@ use itertools::Itertools;
 use std::cmp;
 use std::str::FromStr;
 
-pub const UNCOMMITTED_CHANGES_EXPRESSION: &str = "*";
+pub const UNCOMMITTED_CHANGES_EXPRESSION: &str = "!";
 
 pub enum VersionOrUncommitted {
     Version(VersionId),
