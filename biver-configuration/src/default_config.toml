@@ -9,3 +9,9 @@ preview_command = ["magick", "{in}", "-flatten", "-thumbnail", "1024x1024>", "jp
 [[file_type_rules]]
 extensions = ["kra"]
 preview_command = ["sh", "-c", "unzip -p '{in}' mergedimage.png | magick png:- -thumbnail '1024x1024>' 'jpg:{out}'"]
+
+[[file_type_rules]]
+extensions = ["clip"]
+# See https://github.com/parka6060/CSPenguin-Installer/tree/main/patches/thumbnailer
+# Or for large previews https://github.com/igapanovich/CSPenguin-Installer/tree/main/patches/thumbnailer
+preview_command = ["sh", "-c", '''tmp=$(mktemp) && trap 'rm -f "$tmp"' EXIT && clip-thumbnailer '{in}' "$tmp" 1024 && magick "png:$tmp" 'jpg:{out}' ''']
