@@ -15,6 +15,8 @@ egui = "0.37.0"
 eframe = "0.37.0"
 image = "0.25.9"
 tracing-subscriber = { version = "0.3.23", features = ["std", "env-filter"] }
+tracing-appender = "0.2.5"
 
 biver-core = { path = "../biver-core" }
 biver-configuration = { path = "../biver-configuration" }
+biver-directories = { path = "../biver-directories" }

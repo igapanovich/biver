@@ -7,12 +7,10 @@ pub fn config() -> Result<PathBuf, GetProjectDirsError> {
     let project_dirs = project_dirs()?;
     Ok(project_dirs.config_local_dir().to_path_buf())
 }
-pub fn runtime() -> Result<PathBuf, GetProjectDirsError> {
+
+pub fn logs() -> Result<PathBuf, GetProjectDirsError> {
     let project_dirs = project_dirs()?;
-    Ok(project_dirs
-        .runtime_dir()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| project_dirs.data_local_dir().join("temp")))
+    Ok(project_dirs.data_local_dir().join("logs").to_path_buf())
 }
 
 fn project_dirs() -> Result<ProjectDirs, GetProjectDirsError> {

@@ -75,6 +75,24 @@ impl From<biver_configuration::Error> for Error {
     }
 }
 
+impl From<biver_directories::GetProjectDirsError> for Error {
+    fn from(_: biver_directories::GetProjectDirsError) -> Self {
+        Self {
+            message: "failed to get project directories".to_string(),
+            severity: Severity::Error,
+        }
+    }
+}
+
+impl From<tracing_appender::rolling::InitError> for Error {
+    fn from(value: tracing_appender::rolling::InitError) -> Self {
+        Self {
+            message: format!("failed to initialize tracing appender: {}", value),
+            severity: Severity::Error,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Severity {
     Error,

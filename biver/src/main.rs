@@ -13,8 +13,9 @@ use clap::Parser;
 use colored::Colorize;
 use std::ffi::{OsStr, OsString};
 use std::io;
-use std::io::{IsTerminal, Read, Seek};
+use std::io::{Read, Seek};
 use std::process::ExitCode;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -27,8 +28,6 @@ mod target_expression;
 mod viewer;
 
 fn main() -> ExitCode {
-    init_tracing();
-
     let arguments = CommandLineArguments::parse();
 
     match run_command(arguments.command) {
@@ -53,6 +52,8 @@ fn main() -> ExitCode {
 }
 
 fn run_command(command: Command) -> Result<()> {
+    init_tracing()?;
+
     match command {
         Command::Status {
             versioned_file_path,
@@ -505,18 +506,25 @@ fn core_config(versioned_file_extension: Option<&OsStr>) -> Result<biver_core::C
     Ok(config)
 }
 
-fn init_tracing() {
+fn init_tracing() -> Result<()> {
+    let rolling_file_appender = RollingFileAppender::builder()
+        .rotation(Rotation::DAILY)
+        .filename_suffix("log")
+        .max_log_files(14)
+        .build(biver_directories::logs()?)?;
+
     let stdout_layer = tracing_subscriber::fmt::layer()
         .pretty()
         .with_file(false)
-        .with_ansi(io::stdout().is_terminal())
-        .with_writer(io::stdout)
+        .with_ansi(false)
+        .with_writer(rolling_file_appender)
         .with_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("warn,biver=trace")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn,biver=info")),
         );
 
     tracing_subscriber::registry().with(stdout_layer).init();
+
+    Ok(())
 }
 
 fn preview<'a>(
