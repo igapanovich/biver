@@ -97,6 +97,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn commit(&mut self, description: String) -> Result<CommitResult> {
         use_break!(self, {
             let Some(head_branch) = self.tree.head_branch().cloned() else {
@@ -153,6 +154,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn amend(&mut self, description: Option<String>) -> Result<AmendResult> {
         use_break!(self, {
             let Some(head_branch) = self.tree.head_branch().cloned() else {
@@ -236,6 +238,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn discard(&self) -> Result<()> {
         use_break_non_critical!(self, {
             let extr_path = self.extraction_path(self.tree.head_version_id())?;
@@ -244,6 +247,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn check_out_branch(&mut self, branch: BranchName) -> Result<CheckOutBranchResult> {
         use_break!(self, {
             let has_uncommitted_changes = self.has_uncommitted_changes()?;
@@ -269,6 +273,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn check_out_version(&mut self, version_id: VersionId) -> Result<CheckOutVersionResult> {
         use_break!(self, {
             let has_uncommitted_changes = self.has_uncommitted_changes()?;
@@ -292,6 +297,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn update_description(
         &mut self,
         version_id: VersionId,
@@ -315,6 +321,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn restore_version(
         &self,
         version_id: VersionId,
@@ -354,6 +361,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn soft_reset(&mut self, stop_at_version_id: VersionId) -> Result<SoftResetResult> {
         use_break!(self, {
             let Some(head_branch) = self.tree.head_branch().cloned() else {
@@ -422,6 +430,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn rebase(
         &mut self,
         rebased_version_id: VersionId,
@@ -514,6 +523,7 @@ impl Session {
         Ok(RebaseResult::Ok(cleanup_result))
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn create_branch(
         &mut self,
         branch_name: BranchName,
@@ -545,6 +555,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn rename_branch(
         &mut self,
         old_branch_name: &BranchName,
@@ -570,6 +581,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
     pub fn remove_branch(&mut self, branch_name: &BranchName) -> Result<RemoveBranchResult> {
         use_break!(self, {
             let Some(branch_tip_id) = self.tree.branch_tip_map().get(branch_name).copied() else {

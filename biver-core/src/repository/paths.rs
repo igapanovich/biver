@@ -23,11 +23,15 @@ pub struct Paths {
 
 impl Paths {
     pub fn new(versioned_file_path: &Path) -> Self {
-        let repository_dir = repository_dir(versioned_file_path);
+        Self::from_path_buf(versioned_file_path.to_path_buf())
+    }
+
+    pub fn from_path_buf(versioned_file_path: PathBuf) -> Self {
+        let repository_dir = repository_dir(&versioned_file_path);
         let backup_dir = repository_dir.join("backup");
 
         Paths {
-            versioned_file: versioned_file_path.to_path_buf(),
+            versioned_file: versioned_file_path,
             full_content_dir: repository_dir.join("full_content"),
             reverse_patch_dir: repository_dir.join("reverse_patch"),
             preview_dir: repository_dir.join("preview"),

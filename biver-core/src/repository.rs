@@ -7,9 +7,11 @@ use crate::{Config, Error};
 use chrono::Utc;
 pub use paths::Paths;
 pub use session::*;
+use std::fmt::{Debug, Formatter};
 use std::fs;
 use std::fs::File;
 use std::path::Path;
+use tracing::field;
 use variantly::Variantly;
 
 mod common;
@@ -20,14 +22,34 @@ mod session;
 const SCHEMA_VERSION: u32 = 1;
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Variantly)]
+#[derive(Variantly)]
 pub enum TryStartSessionResult {
     Ok(Session),
     NotInitialized,
 }
 
+impl Debug for TryStartSessionResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TryStartSessionResult::Ok(_) => {
+                write!(f, "Ok(Session)")
+            }
+            TryStartSessionResult::NotInitialized => {
+                write!(f, "NotInitialized")
+            }
+        }
+    }
+}
+
+#[tracing::instrument(ret, fields(versioned_file_path_canonical = field::Empty))]
 pub fn try_start_session(versioned_file_path: &Path) -> Result<TryStartSessionResult> {
-    let paths = Paths::new(versioned_file_path);
+    let versioned_file_path = fs::canonicalize(versioned_file_path)?;
+    tracing::Span::current().record(
+        "versioned_file_path_canonical",
+        field::debug(&versioned_file_path),
+    );
+
+    let paths = Paths::from_path_buf(versioned_file_path);
 
     if !initialized_internal(&paths)? {
         return Ok(TryStartSessionResult::NotInitialized);
@@ -51,13 +73,20 @@ pub enum InitializeResult {
     AlreadyInitialized,
 }
 
+#[tracing::instrument(ret, fields(versioned_file_path_canonical = field::Empty))]
 pub fn initialize(
     config: Config,
     versioned_file_path: &Path,
     branch_name: Option<BranchName>,
     description: String,
 ) -> Result<InitializeResult> {
-    let paths = Paths::new(versioned_file_path);
+    let versioned_file_path = fs::canonicalize(versioned_file_path)?;
+    tracing::Span::current().record(
+        "versioned_file_path_canonical",
+        field::debug(&versioned_file_path),
+    );
+
+    let paths = Paths::from_path_buf(versioned_file_path);
 
     if initialized_internal(&paths)? {
         return Ok(InitializeResult::AlreadyInitialized);

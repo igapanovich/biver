@@ -1,6 +1,5 @@
 # 0.1
 
-- Logs
 - Licenses
 - Readme
 
