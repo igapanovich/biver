@@ -1,6 +1,5 @@
 # 0.1
 
-- Licenses
 - Readme
 
 # 0.2
