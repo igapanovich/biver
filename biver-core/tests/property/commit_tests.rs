@@ -2,7 +2,7 @@ use crate::helpers::arb::TestEnvOption::{
     HeadOnBranch, HeadOnVersion, NoUncommittedChanges, UncommittedChanges,
 };
 use crate::helpers::diff::Diff;
-use crate::helpers::snapshot::Snapshot;
+use crate::helpers::test_env_snapshot::TestEnvSnapshot;
 use crate::helpers::{arb, assert_repository_integrity};
 use biver_core::repository::{CleanupResult, CommitResult};
 use itertools::Itertools;
@@ -10,14 +10,14 @@ use proptest::prelude::*;
 
 proptest! {
     #[test]
-    fn commit_ok_properties(env in arb::env_with_opts(&[HeadOnBranch, UncommittedChanges]), description in any::<String>()) {
-        let mut session = env.start_session();
+    fn commit_ok_properties(test_env in arb::test_env_with_opts(&[HeadOnBranch, UncommittedChanges]), description in any::<String>()) {
+        let mut session = test_env.start_session();
 
-        let before = env.snapshot(&session);
+        let before = test_env.snapshot(&session);
 
         let result = session.commit(description)?;
 
-        let after = env.snapshot(&session);
+        let after = test_env.snapshot(&session);
 
         prop_assert_eq!(result, CommitResult::Ok(CleanupResult::Ok), "commit succeeds if head is on a branch and there are uncommitted changes");
 
@@ -25,7 +25,7 @@ proptest! {
         prop_assert_eq!(&before.head, &after.head, "successful commit does not modify head");
         prop_assert_eq!(&before.versioned_file_content, &after.versioned_file_content, "successful commit does not modify versioned file");
 
-        let diff = Snapshot::diff(&before, &after);
+        let diff = TestEnvSnapshot::diff(&before, &after);
 
         prop_assert_eq!(diff.inserted_versions.len(), 1, "successful commit adds one versions");
         prop_assert!(diff.removed_versions.is_empty(), "successful commit does not remove versions");
@@ -37,40 +37,43 @@ proptest! {
             "successful commit modifies head branch and only it"
         );
 
-        assert_repository_integrity(session)?;
+        drop(session);
+        assert_repository_integrity(test_env)?;
     }
 
     #[test]
-    fn commit_head_must_be_on_branch_properties(env in arb::env_with_opts(&[HeadOnVersion, UncommittedChanges]), description in any::<String>()) {
-        let mut session = env.start_session();
+    fn commit_head_must_be_on_branch_properties(test_env in arb::test_env_with_opts(&[HeadOnVersion, UncommittedChanges]), description in any::<String>()) {
+        let mut session = test_env.start_session();
 
-        let before = env.snapshot(&session);
+        let before = test_env.snapshot(&session);
 
         let result = session.commit(description)?;
 
-        let after = env.snapshot(&session);
+        let after = test_env.snapshot(&session);
 
         prop_assert_eq!(result, CommitResult::HeadMustBeOnBranch, "commit fails if head is not pointing at a branch");
 
         prop_assert_eq!(before, after, "failed commit does not modify anything");
 
-        assert_repository_integrity(session)?;
+        drop(session);
+        assert_repository_integrity(test_env)?;
     }
 
     #[test]
-    fn commit_no_uncommitted_changes_properties(env in arb::env_with_opts(&[HeadOnBranch, NoUncommittedChanges]), description in any::<String>()) {
-        let mut session = env.start_session();
+    fn commit_no_uncommitted_changes_properties(test_env in arb::test_env_with_opts(&[HeadOnBranch, NoUncommittedChanges]), description in any::<String>()) {
+        let mut session = test_env.start_session();
 
-        let before = env.snapshot(&session);
+        let before = test_env.snapshot(&session);
 
         let result = session.commit(description)?;
 
-        let after = env.snapshot(&session);
+        let after = test_env.snapshot(&session);
 
         prop_assert_eq!(result, CommitResult::NoUncommittedChanges, "commit is noop if there are no uncommitted changes");
 
         prop_assert_eq!(before, after, "noop commit does not modify anything");
 
-        assert_repository_integrity(session)?;
+        drop(session);
+        assert_repository_integrity(test_env)?;
     }
 }

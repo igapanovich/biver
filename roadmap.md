@@ -6,4 +6,3 @@
 
 - chaos tests
 - GUI
-- Turn backups into proper snapshots with the ability to restore deleted versions

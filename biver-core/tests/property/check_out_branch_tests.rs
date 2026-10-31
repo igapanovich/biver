@@ -8,17 +8,17 @@ use proptest::sample::Index;
 
 proptest! {
     #[test]
-    fn check_out_branch_ok_properties(env in arb::env(), branch_index in any::<Index>()) {
-        let mut session = env.start_session();
+    fn check_out_branch_ok_properties(test_env in arb::test_env(), branch_index in any::<Index>()) {
+        let mut session = test_env.start_session();
 
-        let before = env.snapshot(&session);
+        let before = test_env.snapshot(&session);
 
         let branch_names = session.tree().branch_names().collect_vec();
         let valid_branch_name = branch_index.get_copied(&branch_names).clone();
 
         let result = session.check_out_branch(valid_branch_name.clone())?;
 
-        let after = env.snapshot(&session);
+        let after = test_env.snapshot(&session);
 
         prop_assert_eq!(result, CheckOutBranchResult::Ok, "check_out_branch succeeds if target branch is valid");
 
@@ -32,25 +32,27 @@ proptest! {
         prop_assert_eq!(&before.branches, &after.branches, "successful check_out_branch does not modify branches");
         prop_assert_eq!(&before.versions, &after.versions, "successful check_out_branch does not modify versions");
 
-        assert_repository_integrity(session)?;
+        drop(session);
+        assert_repository_integrity(test_env)?;
     }
 
     #[test]
-    fn check_out_branch_branch_not_found_properties(env in arb::env(), branch_name in arb::branch_name()) {
-        let mut session = env.start_session();
+    fn check_out_branch_branch_not_found_properties(test_env in arb::test_env(), branch_name in arb::branch_name()) {
+        let mut session = test_env.start_session();
 
         prop_assume!(session.tree().branch_names().all(|b| b != &branch_name));
 
-        let before = env.snapshot(&session);
+        let before = test_env.snapshot(&session);
 
         let result = session.check_out_branch(branch_name)?;
 
-        let after = env.snapshot(&session);
+        let after = test_env.snapshot(&session);
 
         prop_assert_eq!(result, CheckOutBranchResult::BranchNotFound, "check_out_branch fails if branch is not found");
 
         prop_assert_eq!(before, after, "failed check_out_branch does not modify anything");
 
-        assert_repository_integrity(session)?;
+        drop(session);
+        assert_repository_integrity(test_env)?;
     }
 }

@@ -1,7 +1,5 @@
-use std::fs::File;
 use std::io;
 use std::io::{BufReader, Read};
-use std::path::Path;
 use xxhash_rust::xxh3::Xxh3;
 
 pub fn read(file: impl Read) -> io::Result<u128> {
@@ -18,8 +16,4 @@ pub fn read(file: impl Read) -> io::Result<u128> {
     }
 
     Ok(hasher.digest128())
-}
-
-pub fn from_file_path(file: &Path) -> io::Result<u128> {
-    read(File::open(file)?)
 }

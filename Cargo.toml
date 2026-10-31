@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["biver", "biver-configuration", "biver-core", "biver-directories"]
+members = ["biver", "biver-configuration", "biver-core", "biver-directories", "biver-std-environment"]
 
 [workspace.package]
 version = "0.1.1"

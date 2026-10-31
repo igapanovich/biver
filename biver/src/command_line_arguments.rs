@@ -15,6 +15,9 @@ pub enum Command {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 
+        /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        snapshot: Option<String>,
+
         /// Show all versions (by default, limited to 20 most recent)
         #[arg(short = 'a', long = "all")]
         all: bool,
@@ -26,6 +29,9 @@ pub enum Command {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 
+        /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        snapshot: Option<String>,
+
         /// Target branch or version to preview. May be one of the following (in order of precedence): branch name, version ID, head offset (@, @1, @2), version nickname (adjective-noun, adjectivenoun, an).
         target: String,
     },
@@ -35,6 +41,9 @@ pub enum Command {
     Compare {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
+
+        /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        snapshot: Option<String>,
 
         /// Target branch or version to compare. May be one of the following (in order of precedence): branch name, version ID, head offset (@, @1, @2), version nickname (adjective-noun, adjectivenoun, an).
         target1: String,
@@ -148,6 +157,9 @@ pub enum Command {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
 
+        /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        snapshot: Option<String>,
+
         /// Output file path. If not specified, the versioned file path will be used.
         #[arg(short = 'o', long = "output")]
         output: Option<PathBuf>,
@@ -159,6 +171,12 @@ pub enum Command {
     /// Branch commands
     #[command(subcommand)]
     Branch(BranchCommand),
+
+    /// Perform repository maintenance tasks to optimize disk usage
+    TidyUp {
+        #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
+        versioned_file_path: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -176,6 +194,9 @@ pub enum BranchCommand {
     List {
         #[arg(short = 'f', long = "file", env = "BIVER_VERSIONED_FILE")]
         versioned_file_path: PathBuf,
+
+        /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        snapshot: Option<String>,
     },
 
     /// Rename a branch

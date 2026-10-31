@@ -3,20 +3,22 @@ use crate::data::tree::{
     OverwriteBranchTipError, OverwriteBranchTipOutcome, PopBranchOutcome, RebaseBranchError,
     RemoveBranchError, RenameBranchError, VersionUpdate,
 };
-use crate::data::{BranchName, Tree, Version, VersionId};
+use crate::data::{BranchName, Snapshot, Tree, VersionId};
+use crate::environment::{Environment, LockOutcome};
 use crate::error::Result;
-use crate::repository::common;
 use crate::repository::paths::Paths;
 use crate::repository::preview::Preview;
+use crate::repository::{SCHEMA_VERSION, common};
 use crate::utilities::external_preview_command::create_preview;
 use crate::utilities::{external_diff_command, xxh3_128};
 use crate::{Config, Error, temp_file};
 use chrono::Utc;
-use std::fs::{File, OpenOptions, TryLockError};
+use itertools::Itertools;
+use std::collections::HashSet;
 use std::io::{Read, Seek};
 use std::ops::{Add, AddAssign};
 use std::path::{Path, PathBuf};
-use std::{fs, mem};
+use std::{io, mem};
 use variantly::Variantly;
 
 macro_rules! use_break {
@@ -44,35 +46,42 @@ macro_rules! use_break_non_critical {
     }};
 }
 
-#[derive(Debug)]
 pub struct Session {
+    env: Box<dyn Environment>,
     config: Config,
     paths: Paths,
     tree: Tree,
+    snapshot: Snapshot,
     broken: bool,
-    lock: File,
+    lock: std::fs::File,
 }
 
 impl Session {
-    pub(crate) fn new(config: Config, paths: Paths, tree: Tree) -> Result<Session> {
-        let lock = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(paths.lock_file())?;
+    pub(crate) fn new(
+        env: impl Environment + 'static,
+        paths: Paths,
+        snapshot: Snapshot,
+    ) -> Result<Session> {
+        let lock = match env.try_lock_file(paths.lock_file())? {
+            LockOutcome::Acquired(lock) => lock,
+            LockOutcome::Locked => return Err(Error::RepositoryLocked),
+        };
 
-        if let Err(err) = lock.try_lock() {
-            return match err {
-                TryLockError::WouldBlock => Err(Error::RepositoryLocked),
-                TryLockError::Error(err) => Err(err.into()),
-            };
-        }
+        validate_schema_version(&env, &paths)?;
+
+        let Some(tree) = Self::read_tree(&env, &paths, snapshot)? else {
+            return Err(Error::SnapshotUnavailable);
+        };
+
+        let config_str = env.read_file_to_end(paths.config_file())?;
+        let config = toml::de::from_slice(&config_str)?;
 
         let session = Session {
+            env: Box::new(env),
             config,
             paths,
             tree,
+            snapshot,
             lock,
             broken: false,
         };
@@ -97,8 +106,11 @@ impl Session {
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn commit(&mut self, description: String) -> Result<CommitResult> {
+        self.assert_not_read_only()?;
+
         use_break!(self, {
             let Some(head_branch) = self.tree.head_branch().cloned() else {
                 return Ok(CommitResult::HeadMustBeOnBranch);
@@ -148,14 +160,17 @@ impl Session {
 
             self.flush_tree()?;
 
-            let cleanup_result = self.cleanup_full_content_if_unused(parent_of_new_version_id);
+            let cleanup_result = self.cleanup(&[parent_of_new_version_id]);
 
             Ok(CommitResult::Ok(cleanup_result))
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn amend(&mut self, description: Option<String>) -> Result<AmendResult> {
+        self.assert_not_read_only()?;
+
         use_break!(self, {
             let Some(head_branch) = self.tree.head_branch().cloned() else {
                 return Ok(AmendResult::HeadMustBeOnBranch);
@@ -226,20 +241,23 @@ impl Session {
 
             self.flush_tree()?;
 
-            let mut cleanup_result = self.cleanup_full_content_if_unused(former_head_id);
-
-            cleanup_result += if let Some(removed_version) = removed_version {
-                self.cleanup_removed_version_content([removed_version])
-            } else {
-                CleanupResult::Ok
-            };
+            let cleanup_result = self.cleanup(
+                &removed_version
+                    .iter()
+                    .map(|x| x.id)
+                    .chain([former_head_id])
+                    .collect_vec(),
+            );
 
             Ok(AmendResult::Ok(cleanup_result))
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn discard(&self) -> Result<()> {
+        self.assert_not_read_only()?;
+
         use_break_non_critical!(self, {
             let extr_path = self.extraction_path(self.tree.head_version_id())?;
             self.extract_into_versioned_file(&extr_path)?;
@@ -247,8 +265,11 @@ impl Session {
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn check_out_branch(&mut self, branch: BranchName) -> Result<CheckOutBranchResult> {
+        self.assert_not_read_only()?;
+
         use_break!(self, {
             let has_uncommitted_changes = self.has_uncommitted_changes()?;
 
@@ -273,8 +294,11 @@ impl Session {
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn check_out_version(&mut self, version_id: VersionId) -> Result<CheckOutVersionResult> {
+        self.assert_not_read_only()?;
+
         use_break!(self, {
             let has_uncommitted_changes = self.has_uncommitted_changes()?;
 
@@ -297,12 +321,15 @@ impl Session {
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn update_description(
         &mut self,
         version_id: VersionId,
         new_description: String,
     ) -> Result<UpdateDescriptionResult> {
+        self.assert_not_read_only()?;
+
         use_break!(self, {
             let updated = self.tree.update_version(
                 version_id,
@@ -321,26 +348,33 @@ impl Session {
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn restore_version(
         &self,
         version_id: VersionId,
         destination: &Path,
     ) -> Result<RestoreVersionResult> {
         use_break_non_critical!(self, {
-            let destination = if fs::exists(destination)? {
-                &fs::canonicalize(destination)?
+            let destination = if self.env.file_exists(destination)? {
+                &self.env.canonicalize_path(destination)?
             } else {
                 destination
             };
 
-            let versioned_file = fs::canonicalize(self.paths.versioned_file())?;
+            let versioned_file = self.env.canonicalize_path(self.paths.versioned_file())?;
 
-            if destination == versioned_file && self.has_uncommitted_changes()? {
-                return Ok(RestoreVersionResult::WouldOverwriteUncommittedChanges);
+            if destination == versioned_file {
+                if self.snapshot != Snapshot::Main {
+                    return Err(Error::RepositoryReadOnly);
+                }
+
+                if self.has_uncommitted_changes()? {
+                    return Ok(RestoreVersionResult::WouldOverwriteUncommittedChanges);
+                }
             }
 
-            let repository_dir = fs::canonicalize(self.paths.repository_dir())?;
+            let repository_dir = self.env.canonicalize_path(self.paths.repository_dir())?;
 
             if destination.starts_with(repository_dir) {
                 return Ok(RestoreVersionResult::CannotRestoreIntoRepositoryDir);
@@ -351,7 +385,7 @@ impl Session {
             }
 
             if let Some(dest_parent) = destination.parent() {
-                fs::create_dir_all(dest_parent)?;
+                self.env.create_dir_all(dest_parent)?;
             }
 
             let extr_path = self.extraction_path(version_id)?;
@@ -361,8 +395,11 @@ impl Session {
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn soft_reset(&mut self, stop_at_version_id: VersionId) -> Result<SoftResetResult> {
+        self.assert_not_read_only()?;
+
         use_break!(self, {
             let Some(head_branch) = self.tree.head_branch().cloned() else {
                 return Ok(SoftResetResult::HeadMustBeOnBranch);
@@ -419,116 +456,133 @@ impl Session {
             let temp = temp_file::new_path();
             self.extract_path(&stop_at_version_extr_path, &temp)?;
             self.store_full_content(&temp, stop_at_version_id)?;
-            fs::remove_file(temp)?;
+            self.env.remove_file(&temp)?;
 
             self.flush_tree()?;
 
-            let cleanup_result = self.cleanup_full_content_if_unused(former_head_id)
-                + self.cleanup_removed_version_content(removed_versions);
+            let cleanup_result = self.cleanup(
+                &removed_versions
+                    .iter()
+                    .map(|v| v.id)
+                    .chain([former_head_id])
+                    .collect_vec(),
+            );
 
             Ok(SoftResetResult::Ok(cleanup_result))
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn rebase(
         &mut self,
         rebased_version_id: VersionId,
         new_parent_id: VersionId,
     ) -> Result<RebaseResult> {
-        if self.tree.version(rebased_version_id).is_none() {
-            return Ok(RebaseResult::InvalidRebasedVersion);
-        }
+        self.assert_not_read_only()?;
 
-        if self.tree.version(new_parent_id).is_none() {
-            return Ok(RebaseResult::InvalidNewParentVersion);
-        }
+        use_break!(self, {
+            if self.tree.version(rebased_version_id).is_none() {
+                return Ok(RebaseResult::InvalidRebasedVersion);
+            }
 
-        let Some(head_branch) = self.tree.head_branch().cloned() else {
-            return Ok(RebaseResult::HeadMustBeOnBranch);
-        };
+            if self.tree.version(new_parent_id).is_none() {
+                return Ok(RebaseResult::InvalidNewParentVersion);
+            }
 
-        let rebased_version_extr_path = self.extraction_path(rebased_version_id)?;
-        let new_parent_extr_path = self.extraction_path(new_parent_id)?;
-
-        let rebase_outcome =
-            match self
-                .tree
-                .rebase_branch(&head_branch, rebased_version_id, new_parent_id)
-            {
-                Ok(rebase_outcome) => rebase_outcome,
-                Err(err) => {
-                    return Ok(match err {
-                        RebaseBranchError::BranchNotFound => panic!("Head branch not found"),
-                        RebaseBranchError::RebasedVersionNotFound => {
-                            RebaseResult::InvalidRebasedVersion
-                        }
-                        RebaseBranchError::NewParentVersionNotFound => {
-                            RebaseResult::InvalidNewParentVersion
-                        }
-                        RebaseBranchError::CannotRebaseRoot => RebaseResult::CannotRebaseRoot,
-                        RebaseBranchError::RebasedVersionDoesNotBelongToBranch => {
-                            RebaseResult::RebasedVersionDoesNotBelongToHeadBranch
-                        }
-                    });
-                }
+            let Some(head_branch) = self.tree.head_branch().cloned() else {
+                return Ok(RebaseResult::HeadMustBeOnBranch);
             };
 
-        let new_rebased_version_id = rebase_outcome
-            .copied_versions
-            .iter()
-            .find(|c| c.old_id == rebased_version_id)
-            .expect("Rebased version must be copied")
-            .new_id;
+            let rebased_version_extr_path = self.extraction_path(rebased_version_id)?;
+            let new_parent_extr_path = self.extraction_path(new_parent_id)?;
 
-        let new_parent_content_tmp = temp_file::new_path();
-        let rebased_version_content_tmp = temp_file::new_path();
-        self.extract_path(&new_parent_extr_path, &new_parent_content_tmp)?;
-        self.extract_path(&rebased_version_extr_path, &rebased_version_content_tmp)?;
-        self.store_reverse_patch(
-            new_rebased_version_id,
-            &rebased_version_content_tmp,
-            &new_parent_content_tmp,
-        )?;
-        fs::remove_file(new_parent_content_tmp)?;
-        fs::remove_file(rebased_version_content_tmp)?;
+            let rebase_outcome =
+                match self
+                    .tree
+                    .rebase_branch(&head_branch, rebased_version_id, new_parent_id)
+                {
+                    Ok(rebase_outcome) => rebase_outcome,
+                    Err(err) => {
+                        return Ok(match err {
+                            RebaseBranchError::BranchNotFound => panic!("Head branch not found"),
+                            RebaseBranchError::RebasedVersionNotFound => {
+                                RebaseResult::InvalidRebasedVersion
+                            }
+                            RebaseBranchError::NewParentVersionNotFound => {
+                                RebaseResult::InvalidNewParentVersion
+                            }
+                            RebaseBranchError::CannotRebaseRoot => RebaseResult::CannotRebaseRoot,
+                            RebaseBranchError::RebasedVersionDoesNotBelongToBranch => {
+                                RebaseResult::RebasedVersionDoesNotBelongToHeadBranch
+                            }
+                        });
+                    }
+                };
 
-        let new_branch_tip_id = self.tree.head_branch_tip().expect("Validated above").id;
+            let new_rebased_version_id = rebase_outcome
+                .copied_versions
+                .iter()
+                .find(|c| c.old_id == rebased_version_id)
+                .expect("Rebased version must be copied")
+                .new_id;
 
-        for copied in &rebase_outcome.copied_versions {
-            if copied.old_id != rebased_version_id {
-                let old_reverse_patch = self.paths.version_reverse_patch_file(copied.old_id);
-                let new_reverse_patch = self.paths.version_reverse_patch_file(copied.new_id);
+            let new_parent_content_tmp = temp_file::new_path();
+            let rebased_version_content_tmp = temp_file::new_path();
+            self.extract_path(&new_parent_extr_path, &new_parent_content_tmp)?;
+            self.extract_path(&rebased_version_extr_path, &rebased_version_content_tmp)?;
+            self.store_reverse_patch(
+                new_rebased_version_id,
+                &rebased_version_content_tmp,
+                &new_parent_content_tmp,
+            )?;
+            self.env.remove_file(&new_parent_content_tmp)?;
+            self.env.remove_file(&rebased_version_content_tmp)?;
 
-                fs::copy(old_reverse_patch, new_reverse_patch)?;
+            let new_branch_tip_id = self.tree.head_branch_tip().expect("Validated above").id;
+
+            for copied in &rebase_outcome.copied_versions {
+                if copied.old_id != rebased_version_id {
+                    let old_reverse_patch = self.paths.version_reverse_patch_file(copied.old_id);
+                    let new_reverse_patch = self.paths.version_reverse_patch_file(copied.new_id);
+
+                    self.env
+                        .overwrite_copy_file(&old_reverse_patch, &new_reverse_patch)?;
+                }
+
+                if copied.new_id == new_branch_tip_id {
+                    let old_full_content = self.paths.version_full_content_file(copied.old_id);
+                    let new_full_content = self.paths.version_full_content_file(copied.new_id);
+
+                    self.env
+                        .overwrite_copy_file(&old_full_content, &new_full_content)?;
+                }
             }
 
-            if copied.new_id == new_branch_tip_id {
-                let old_full_content = self.paths.version_full_content_file(copied.old_id);
-                let new_full_content = self.paths.version_full_content_file(copied.new_id);
+            self.flush_tree()?;
 
-                fs::copy(old_full_content, new_full_content)?;
-            }
-        }
+            let cleanup_result = self.cleanup(
+                &rebase_outcome
+                    .removed_versions
+                    .iter()
+                    .map(|v| v.id)
+                    .chain(rebase_outcome.copied_versions.iter().map(|c| c.old_id))
+                    .collect_vec(),
+            );
 
-        self.flush_tree()?;
-
-        let mut cleanup_result =
-            self.cleanup_removed_version_content(rebase_outcome.removed_versions);
-
-        for copied in rebase_outcome.copied_versions {
-            cleanup_result += self.cleanup_full_content_if_unused(copied.old_id);
-        }
-
-        Ok(RebaseResult::Ok(cleanup_result))
+            Ok(RebaseResult::Ok(cleanup_result))
+        })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn create_branch(
         &mut self,
         branch_name: BranchName,
         branch_tip_id: VersionId,
     ) -> Result<CreateBranchResult> {
+        self.assert_not_read_only()?;
+
         use_break!(self, {
             if self.tree.version(branch_tip_id).is_none() {
                 return Ok(CreateBranchResult::InvalidBranchTipId);
@@ -545,7 +599,7 @@ impl Session {
 
             let full_content_path = self.paths.version_full_content_file(branch_tip_id);
 
-            if !fs::exists(&full_content_path)? {
+            if !self.env.file_exists(&full_content_path)? {
                 self.extract_path(&branch_tip_extr_path, &full_content_path)?;
             }
 
@@ -555,12 +609,15 @@ impl Session {
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn rename_branch(
         &mut self,
         old_branch_name: &BranchName,
         new_branch_name: BranchName,
     ) -> Result<RenameBranchResult> {
+        self.assert_not_read_only()?;
+
         use_break!(self, {
             if *old_branch_name == new_branch_name {
                 return Ok(RenameBranchResult::Ok);
@@ -581,8 +638,11 @@ impl Session {
         })
     }
 
-    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()), ret)]
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
     pub fn remove_branch(&mut self, branch_name: &BranchName) -> Result<RemoveBranchResult> {
+        self.assert_not_read_only()?;
+
         use_break!(self, {
             let Some(branch_tip_id) = self.tree.branch_tip_map().get(branch_name).copied() else {
                 return Ok(RemoveBranchResult::BranchNotFound);
@@ -605,69 +665,161 @@ impl Session {
 
             self.flush_tree()?;
 
-            let cleanup_result = self.cleanup_full_content_if_unused(branch_tip_id)
-                + self.cleanup_removed_version_content(removed_versions);
+            let cleanup_result = self.cleanup(
+                &removed_versions
+                    .iter()
+                    .map(|v| v.id)
+                    .chain([branch_tip_id])
+                    .collect_vec(),
+            );
 
             Ok(RemoveBranchResult::Ok(cleanup_result))
         })
     }
 
     pub fn version_full_content(&self, version_id: VersionId) -> Result<Option<impl Read + Seek>> {
-        if self.tree.version(version_id).is_none() {
-            return Ok(None);
-        }
+        use_break_non_critical!(self, {
+            if self.tree.version(version_id).is_none() {
+                return Ok(None);
+            }
 
-        let path = self.paths.version_full_content_file(version_id);
+            let path = self.paths.version_full_content_file(version_id);
 
-        if !fs::exists(&path)? {
-            return Ok(None);
-        }
+            if !self.env.file_exists(&path)? {
+                return Ok(None);
+            }
 
-        Ok(Some(File::open(path)?))
+            Ok(Some(self.env.read_file(&path)?))
+        })
     }
 
     pub fn version_reverse_patch(&self, version_id: VersionId) -> Result<Option<impl Read + Seek>> {
-        if self.tree.version(version_id).is_none() {
-            return Ok(None);
-        }
+        use_break_non_critical!(self, {
+            if self.tree.version(version_id).is_none() {
+                return Ok(None);
+            }
 
-        let path = self.paths.version_reverse_patch_file(version_id);
+            let path = self.paths.version_reverse_patch_file(version_id);
 
-        if !fs::exists(&path)? {
-            return Ok(None);
-        }
+            if !self.env.file_exists(&path)? {
+                return Ok(None);
+            }
 
-        Ok(Some(File::open(path)?))
+            Ok(Some(self.env.read_file(&path)?))
+        })
     }
 
     pub fn preview(&self, version_id: VersionId) -> Result<Option<Preview>> {
-        if self.tree.version(version_id).is_none() {
-            return Ok(None);
-        }
+        use_break_non_critical!(self, {
+            if self.tree.version(version_id).is_none() {
+                return Ok(None);
+            }
 
-        let path = self.paths.version_preview_file(version_id);
+            let path = self.paths.version_preview_file(version_id);
 
-        if !fs::exists(&path)? {
-            return Ok(None);
-        }
+            if !self.env.file_exists(&path)? {
+                return Ok(None);
+            }
 
-        Ok(Some(Preview::new(path)?))
+            Ok(Some(Preview::new(path)?))
+        })
     }
 
     pub fn preview_versioned_file(&self) -> Result<Option<Preview>> {
-        let Some(preview_command) = &self.config.preview_command else {
-            return Ok(None);
-        };
+        use_break_non_critical!(self, {
+            let Some(preview_command) = &self.config.preview_command else {
+                return Ok(None);
+            };
 
-        let temp = temp_file::new_path();
-        create_preview(preview_command, self.paths.versioned_file(), &temp)?;
+            let temp = temp_file::new_path();
+            create_preview(preview_command, self.paths.versioned_file(), &temp)?;
 
-        Ok(Some(Preview::new(temp)?.with_cleanup()))
+            Ok(Some(Preview::new(temp)?.with_cleanup()))
+        })
     }
 
-    fn flush_tree(&self) -> Result<()> {
-        common::write_tree(&self.paths, &self.tree)?;
+    #[tracing::instrument(skip(self), fields(config = ?self.config, versioned_file = ?self.paths.versioned_file()
+    ), ret)]
+    pub fn tidy_up(&self) -> Result<()> {
+        self.assert_not_read_only()?;
+
+        use_break_non_critical!(self, {
+            let snapshot_trees = self.snapshot_trees()?;
+            let all_trees = snapshot_trees.iter().chain([&self.tree]).collect_vec();
+
+            let all_version_ids = all_trees
+                .iter()
+                .flat_map(|t| t.versions().map(|v| v.id))
+                .collect_vec();
+
+            let all_head_tips = all_trees
+                .iter()
+                .flat_map(|t| t.branch_tip_map().values())
+                .copied()
+                .collect_vec();
+
+            let retained_full_content_paths = self.canonicalize_existing_paths(
+                all_head_tips
+                    .iter()
+                    .map(|id| self.paths.version_full_content_file(*id)),
+            )?;
+
+            let retained_reverse_patch_paths = self.canonicalize_existing_paths(
+                all_version_ids
+                    .iter()
+                    .map(|id| self.paths.version_reverse_patch_file(*id)),
+            )?;
+
+            let retained_preview_paths = self.canonicalize_existing_paths(
+                all_version_ids
+                    .iter()
+                    .map(|id| self.paths.version_preview_file(*id)),
+            )?;
+
+            for file in self.env.read_dir(self.paths.full_content_dir())? {
+                let file = self.env.canonicalize_path(&file)?;
+                if !retained_full_content_paths.contains(&file) {
+                    self.env.remove_file(&file)?;
+                }
+            }
+
+            for file in self.env.read_dir(self.paths.reverse_patch_dir())? {
+                let file = self.env.canonicalize_path(&file)?;
+                if !retained_reverse_patch_paths.contains(&file) {
+                    self.env.remove_file(&file)?;
+                }
+            }
+
+            for file in self.env.read_dir(self.paths.preview_dir())? {
+                let file = self.env.canonicalize_path(&file)?;
+                if !retained_preview_paths.contains(&file) {
+                    self.env.remove_file(&file)?;
+                }
+            }
+
+            Ok(())
+        })
+    }
+
+    fn flush_tree(&mut self) -> Result<()> {
+        assert_eq!(self.snapshot, Snapshot::Main);
+        common::write_tree(self.env.as_mut(), &self.paths, &self.tree)?;
         Ok(())
+    }
+
+    fn read_tree(
+        env: &(impl Environment + ?Sized),
+        paths: &Paths,
+        snapshot: Snapshot,
+    ) -> Result<Option<Tree>> {
+        let tree_path = paths.tree_file(snapshot);
+
+        if !env.file_exists(tree_path)? {
+            return Ok(None);
+        }
+
+        let tree = ciborium::de::from_reader(env.read_file(tree_path)?)?;
+        Ok(Some(tree))
     }
 
     fn extraction_path(&self, version_id: VersionId) -> Result<ExtractionPath> {
@@ -684,13 +836,13 @@ impl Session {
             .xxh3_128;
         let full_content_path = self.paths.version_full_content_file(chain[0].id);
 
-        assert!(fs::exists(&full_content_path)?);
+        assert!(self.env.file_exists(&full_content_path)?);
 
         let mut patches = Vec::with_capacity(chain.len() - 1);
 
         for v in chain.iter().take(chain.len() - 1) {
             let reverse_patch_path = self.paths.version_reverse_patch_file(v.id);
-            assert!(fs::exists(&reverse_patch_path)?);
+            assert!(self.env.file_exists(&reverse_patch_path)?);
             patches.push(reverse_patch_path);
         }
 
@@ -703,11 +855,9 @@ impl Session {
 
     fn extract_path(&self, path: &ExtractionPath, destination: &Path) -> Result<()> {
         if path.patches.is_empty() {
-            assert_eq!(
-                xxh3_128::from_file_path(&path.starting_full)?,
-                path.control_xxh3_128
-            );
-            fs::copy(&path.starting_full, destination)?;
+            assert_eq!(self.xxh3_128(&path.starting_full)?, path.control_xxh3_128);
+            self.env
+                .overwrite_copy_file(&path.starting_full, destination)?;
             return Ok(());
         }
 
@@ -718,11 +868,11 @@ impl Session {
         let mut stale = &b;
         let mut stale_exists = false;
 
-        fs::copy(&path.starting_full, actual)?;
+        self.env.overwrite_copy_file(&path.starting_full, actual)?;
 
         for patch_path in &path.patches {
             if stale_exists {
-                fs::remove_file(stale)?;
+                self.env.remove_file(stale)?;
             }
 
             external_diff_command::apply_patch(&self.config, actual, patch_path, stale)?;
@@ -730,11 +880,11 @@ impl Session {
             stale_exists = true;
         }
 
-        assert_eq!(xxh3_128::from_file_path(actual)?, path.control_xxh3_128);
-        fs::copy(actual, destination)?;
+        assert_eq!(self.xxh3_128(actual)?, path.control_xxh3_128);
+        self.env.overwrite_copy_file(actual, destination)?;
 
-        fs::remove_file(&a)?;
-        fs::remove_file(&b)?;
+        self.env.remove_file(&a)?;
+        self.env.remove_file(&b)?;
 
         Ok(())
     }
@@ -746,7 +896,7 @@ impl Session {
 
     fn store_full_content(&self, source: &Path, version: VersionId) -> Result<PathBuf> {
         let dest_path = self.paths.version_full_content_file(version);
-        fs::copy(source, &dest_path)?;
+        self.env.overwrite_copy_file(source, &dest_path)?;
         Ok(dest_path)
     }
 
@@ -766,80 +916,118 @@ impl Session {
         Ok(())
     }
 
-    fn cleanup_removed_version_content(
-        &self,
-        versions: impl IntoIterator<Item = Version>,
-    ) -> CleanupResult {
-        let mut cleanup_result = CleanupResult::Ok;
-
-        for version in versions.into_iter() {
-            let full_content_path = self.paths.version_full_content_file(version.id);
-            let cleanup_full_content_result = fs::exists(&full_content_path).and_then(|exists| {
-                if exists {
-                    fs::remove_file(&full_content_path)?;
-                }
-                Ok(())
-            });
-
-            let reverse_patch_path = self.paths.version_reverse_patch_file(version.id);
-            let cleanup_reverse_patch_result = fs::exists(&reverse_patch_path).and_then(|exists| {
-                if exists {
-                    fs::remove_file(&reverse_patch_path)?;
-                }
-                Ok(())
-            });
-
-            let preview_path = self.paths.version_preview_file(version.id);
-            let cleanup_preview_result = fs::exists(&preview_path).and_then(|exists| {
-                if exists {
-                    fs::remove_file(&preview_path)?;
-                }
-                Ok(())
-            });
-
-            if cleanup_full_content_result.is_err()
-                || cleanup_reverse_patch_result.is_err()
-                || cleanup_preview_result.is_err()
-            {
-                cleanup_result = CleanupResult::Failed;
+    fn remove_file_if_exists(&self, path: &Path) -> CleanupResult {
+        let result = self.env.file_exists(path).and_then(|exists| {
+            if exists {
+                self.env.remove_file(path)?;
             }
-        }
+            Ok(())
+        });
 
-        cleanup_result
-    }
-
-    fn cleanup_full_content_if_unused(&self, version_id: VersionId) -> CleanupResult {
-        if self.tree.is_branch_tip(version_id) {
-            return CleanupResult::Ok;
-        }
-
-        let path = self.paths.version_full_content_file(version_id);
-
-        let Ok(exists) = fs::exists(&path) else {
-            return CleanupResult::Failed;
-        };
-
-        if !exists {
-            return CleanupResult::Ok;
-        }
-
-        if fs::remove_file(path).is_ok() {
+        if result.is_ok() {
             CleanupResult::Ok
         } else {
             CleanupResult::Failed
         }
     }
 
+    fn canonicalize_existing_paths(
+        &self,
+        paths: impl IntoIterator<Item = impl AsRef<Path>>,
+    ) -> Result<Vec<PathBuf>> {
+        let paths = paths
+            .into_iter()
+            .filter_map(|path| match self.env.file_exists(path.as_ref()) {
+                Ok(false) => None,
+                Ok(true) => Some(self.env.canonicalize_path(path.as_ref())),
+                Err(err) => Some(Err(err)),
+            })
+            .collect::<std::result::Result<Vec<_>, io::Error>>()?;
+
+        Ok(paths)
+    }
+
+    fn snapshot_trees(&self) -> Result<Vec<Tree>> {
+        let trees = [
+            Self::read_tree(self.env.as_ref(), &self.paths, Snapshot::Snapshot1),
+            Self::read_tree(self.env.as_ref(), &self.paths, Snapshot::Snapshot2),
+            Self::read_tree(self.env.as_ref(), &self.paths, Snapshot::Snapshot3),
+            Self::read_tree(self.env.as_ref(), &self.paths, Snapshot::Snapshot4),
+            Self::read_tree(self.env.as_ref(), &self.paths, Snapshot::Snapshot5),
+            Self::read_tree(self.env.as_ref(), &self.paths, Snapshot::Snapshot6),
+            Self::read_tree(self.env.as_ref(), &self.paths, Snapshot::Snapshot7),
+            Self::read_tree(self.env.as_ref(), &self.paths, Snapshot::Snapshot8),
+        ]
+        .into_iter()
+        .collect::<Result<Vec<Option<_>>>>()?
+        .into_iter()
+        .flatten()
+        .collect_vec();
+
+        Ok(trees)
+    }
+
+    fn cleanup(&self, version_ids: &[VersionId]) -> CleanupResult {
+        let Ok(snapshot_trees) = self.snapshot_trees() else {
+            return CleanupResult::Failed;
+        };
+
+        let all_trees = snapshot_trees.iter().chain([&self.tree]).collect_vec();
+
+        let mut cleanup_result = CleanupResult::Ok;
+
+        let all_branch_tips = all_trees
+            .iter()
+            .flat_map(|t| t.branch_tip_map().values())
+            .copied()
+            .collect::<HashSet<_>>();
+
+        for version_id in version_ids {
+            let version_is_tip = all_branch_tips.contains(version_id);
+            if version_is_tip {
+                continue;
+            }
+
+            cleanup_result +=
+                self.remove_file_if_exists(&self.paths.version_full_content_file(*version_id));
+
+            let version_is_alive = all_trees.iter().any(|t| t.version(*version_id).is_some());
+            if !version_is_alive {
+                cleanup_result +=
+                    self.remove_file_if_exists(&self.paths.version_reverse_patch_file(*version_id));
+                cleanup_result +=
+                    self.remove_file_if_exists(&self.paths.version_preview_file(*version_id));
+            }
+        }
+
+        cleanup_result
+    }
+
     fn versioned_file_xxh3_128(&self) -> Result<u128> {
-        let value = xxh3_128::from_file_path(self.paths.versioned_file())?;
-        Ok(value)
+        self.xxh3_128(self.paths.versioned_file())
+    }
+
+    fn xxh3_128(&self, path: &Path) -> Result<u128> {
+        Ok(xxh3_128::read(self.env.read_file(path)?)?)
+    }
+
+    fn read_only(&self) -> bool {
+        !matches!(self.snapshot, Snapshot::Main)
+    }
+
+    fn assert_not_read_only(&self) -> Result<()> {
+        if self.read_only() {
+            return Err(Error::RepositoryReadOnly);
+        }
+
+        Ok(())
     }
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
         // Explicit unlock in case file descriptor got shared with a child process
-        let _ = self.lock.unlock();
+        let _ = self.env.unlock_file(&self.lock);
     }
 }
 
@@ -952,4 +1140,22 @@ struct ExtractionPath {
     control_xxh3_128: u128,
     starting_full: PathBuf,
     patches: Vec<PathBuf>,
+}
+
+fn validate_schema_version(env: &impl Environment, paths: &Paths) -> Result<()> {
+    if !env.file_exists(paths.schema_version_file())? {
+        return Err(Error::IncompatibleSchemaVersion("".to_string()));
+    }
+
+    let schema_version_str = env.read_file_to_string(paths.schema_version_file())?;
+
+    let Ok(schema_version) = schema_version_str.parse::<u32>() else {
+        return Err(Error::IncompatibleSchemaVersion(schema_version_str));
+    };
+
+    if schema_version != SCHEMA_VERSION {
+        return Err(Error::IncompatibleSchemaVersion(schema_version_str));
+    }
+
+    Ok(())
 }

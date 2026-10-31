@@ -1,5 +1,6 @@
 use crate::data::tree::NewVersion;
-use crate::data::{BranchName, Tree};
+use crate::data::{BranchName, Snapshot, Tree};
+use crate::environment::Environment;
 use crate::error::Result;
 use crate::utilities::external_preview_command::create_preview;
 use crate::utilities::xxh3_128;
@@ -7,9 +8,7 @@ use crate::{Config, Error};
 use chrono::Utc;
 pub use paths::Paths;
 pub use session::*;
-use std::fmt::{Debug, Formatter};
-use std::fs;
-use std::fs::File;
+use std::fmt::Debug;
 use std::path::Path;
 use tracing::field;
 use variantly::Variantly;
@@ -21,66 +20,21 @@ mod session;
 
 const SCHEMA_VERSION: u32 = 1;
 
-#[allow(clippy::large_enum_variant)]
-#[derive(Variantly)]
-pub enum TryStartSessionResult {
-    Ok(Session),
-    NotInitialized,
-}
-
-impl Debug for TryStartSessionResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TryStartSessionResult::Ok(_) => {
-                write!(f, "Ok(Session)")
-            }
-            TryStartSessionResult::NotInitialized => {
-                write!(f, "NotInitialized")
-            }
-        }
-    }
-}
-
-#[tracing::instrument(ret, fields(versioned_file_path_canonical = field::Empty))]
-pub fn try_start_session(versioned_file_path: &Path) -> Result<TryStartSessionResult> {
-    let versioned_file_path = fs::canonicalize(versioned_file_path)?;
-    tracing::Span::current().record(
-        "versioned_file_path_canonical",
-        field::debug(&versioned_file_path),
-    );
-
-    let paths = Paths::from_path_buf(versioned_file_path);
-
-    if !initialized_internal(&paths)? {
-        return Ok(TryStartSessionResult::NotInitialized);
-    }
-
-    validate_schema_version(&paths)?;
-
-    let tree = ciborium::de::from_reader(File::open(paths.tree_file())?)?;
-
-    let config_str = fs::read(paths.config_file())?;
-    let config = toml::de::from_slice(&config_str)?;
-
-    let session = Session::new(config, paths, tree)?;
-
-    Ok(TryStartSessionResult::Ok(session))
-}
-
 #[derive(Debug, Variantly)]
 pub enum InitializeResult {
     Ok,
     AlreadyInitialized,
 }
 
-#[tracing::instrument(ret, fields(versioned_file_path_canonical = field::Empty))]
-pub fn initialize(
+#[tracing::instrument(ret, skip(env), fields(versioned_file_path_canonical = field::Empty))]
+pub fn initialize<Env: Environment + ?Sized>(
+    env: &Env,
     config: Config,
     versioned_file_path: &Path,
     branch_name: Option<BranchName>,
     description: String,
 ) -> Result<InitializeResult> {
-    let versioned_file_path = fs::canonicalize(versioned_file_path)?;
+    let versioned_file_path = env.canonicalize_path(versioned_file_path)?;
     tracing::Span::current().record(
         "versioned_file_path_canonical",
         field::debug(&versioned_file_path),
@@ -88,26 +42,27 @@ pub fn initialize(
 
     let paths = Paths::from_path_buf(versioned_file_path);
 
-    if initialized_internal(&paths)? {
+    if initialized_internal(env, &paths)? {
         return Ok(InitializeResult::AlreadyInitialized);
     }
 
-    fs::create_dir_all(paths.repository_dir())?;
-    fs::create_dir_all(paths.full_content_dir())?;
-    fs::create_dir_all(paths.reverse_patch_dir())?;
-    fs::create_dir_all(paths.preview_dir())?;
-    fs::create_dir_all(paths.backup_dir())?;
+    env.create_dir_all(paths.repository_dir())?;
+    env.create_dir_all(paths.repository_dir())?;
+    env.create_dir_all(paths.full_content_dir())?;
+    env.create_dir_all(paths.reverse_patch_dir())?;
+    env.create_dir_all(paths.preview_dir())?;
+    env.create_dir_all(paths.snapshot_dir())?;
 
-    fs::write(paths.schema_version_file(), SCHEMA_VERSION.to_string())?;
+    env.overwrite_file(paths.schema_version_file(), &SCHEMA_VERSION.to_string())?;
 
     let config_str = toml::ser::to_string(&config)?;
-    fs::write(paths.config_file(), config_str)?;
+    env.overwrite_file(paths.config_file(), &config_str)?;
 
     let tree = Tree::new(
         branch_name.unwrap_or_else(default_initial_branch_name),
         NewVersion {
             creation_time: Utc::now(),
-            xxh3_128: xxh3_128::from_file_path(paths.versioned_file())?,
+            xxh3_128: xxh3_128::read(env.read_file(paths.versioned_file())?)?,
             description,
         },
     );
@@ -115,7 +70,7 @@ pub fn initialize(
     let root_id = tree.head_version_id();
 
     let content_blob_file_path = paths.version_full_content_file(root_id);
-    fs::copy(paths.versioned_file(), &content_blob_file_path)?;
+    env.overwrite_copy_file(paths.versioned_file(), &content_blob_file_path)?;
 
     if let Some(preview_command) = config.preview_command {
         create_preview(
@@ -125,35 +80,43 @@ pub fn initialize(
         )?;
     }
 
-    common::write_tree(&paths, &tree)?;
+    common::write_tree(env, &paths, &tree)?;
 
     Ok(InitializeResult::Ok)
 }
 
-pub fn initialized(versioned_file_path: &Path) -> Result<bool> {
-    initialized_internal(&Paths::new(versioned_file_path))
-}
+#[tracing::instrument(skip(env), fields(versioned_file_path_canonical = field::Empty))]
+pub fn start_session<Env: Environment + 'static>(
+    env: Env,
+    versioned_file_path: &Path,
+    snapshot: Snapshot,
+) -> Result<Session> {
+    let versioned_file_path = env.canonicalize_path(versioned_file_path)?;
+    tracing::Span::current().record(
+        "versioned_file_path_canonical",
+        field::debug(&versioned_file_path),
+    );
 
-fn initialized_internal(paths: &Paths) -> Result<bool> {
-    Ok(fs::exists(paths.tree_file())?)
-}
+    let paths = Paths::from_path_buf(versioned_file_path);
 
-fn validate_schema_version(paths: &Paths) -> Result<()> {
-    if !fs::exists(paths.schema_version_file())? {
-        return Err(Error::IncompatibleSchemaVersion("".to_string()));
+    if !initialized_internal(&env, &paths)? {
+        return Err(Error::RepositoryNotInitialized);
     }
 
-    let schema_version_str = fs::read_to_string(paths.schema_version_file())?;
+    let session = Session::new(env, paths, snapshot)?;
 
-    let Ok(schema_version) = schema_version_str.parse::<u32>() else {
-        return Err(Error::IncompatibleSchemaVersion(schema_version_str));
-    };
+    Ok(session)
+}
 
-    if schema_version != SCHEMA_VERSION {
-        return Err(Error::IncompatibleSchemaVersion(schema_version_str));
-    }
+pub fn initialized<Env: Environment + ?Sized>(
+    env: &Env,
+    versioned_file_path: &Path,
+) -> Result<bool> {
+    initialized_internal(env, &Paths::new(versioned_file_path))
+}
 
-    Ok(())
+fn initialized_internal<Env: Environment + ?Sized>(env: &Env, paths: &Paths) -> Result<bool> {
+    Ok(env.file_exists(paths.tree_file(Snapshot::Main))?)
 }
 
 fn default_initial_branch_name() -> BranchName {

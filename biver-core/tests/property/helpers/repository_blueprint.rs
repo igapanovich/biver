@@ -1,9 +1,11 @@
-use crate::helpers::extensions::{BiverResultUnwrap, IndexExt, UnwrapExt};
+use crate::helpers::extensions::{BiverResultUnwrap, IndexExt};
 use crate::helpers::file_operation::{FileOperation, FileOperations};
+use crate::helpers::test_env::TestEnv;
 use crate::helpers::version_path::{ResolveVersionPathExt, VersionPath};
-use biver_core::data::BranchName;
+use biver_core::data::{BranchName, Snapshot};
+use biver_core::environment::Environment;
+use biver_core::repository;
 use biver_core::repository::{CleanupResult, CommitResult, CreateBranchResult, Session};
-use biver_core::{Config, repository};
 use itertools::Itertools;
 use proptest::sample::Index;
 use std::fmt::Debug;
@@ -18,13 +20,11 @@ pub struct RepositoryBlueprint {
 }
 
 impl RepositoryBlueprint {
-    pub fn build(&self, configuration: Config, versioned_file_path: &Path) -> Session {
-        let mut session = self
-            .initial_branch
-            .build(configuration, &versioned_file_path);
+    pub fn build(&self, test_env: &TestEnv<impl Environment + Clone>) -> Session {
+        let mut session = self.initial_branch.build(test_env);
 
         for b in &self.other_branches {
-            b.build(&mut session, &versioned_file_path);
+            b.build(&mut session, test_env.versioned_file_path());
         }
 
         match &self.head {
@@ -43,7 +43,7 @@ impl RepositoryBlueprint {
         }
 
         if let Some(uncommitted_changes) = &self.uncommitted_changes {
-            uncommitted_changes.execute(&versioned_file_path);
+            uncommitted_changes.execute(test_env.versioned_file_path());
         }
 
         session
@@ -87,12 +87,15 @@ pub struct InitialBranchBlueprint {
 }
 
 impl InitialBranchBlueprint {
-    fn build(&self, config: Config, versioned_file_path: &Path) -> Session {
-        self.first_version.changes.execute(&versioned_file_path);
+    fn build(&self, test_env: &TestEnv<impl Environment + Clone>) -> Session {
+        self.first_version
+            .changes
+            .execute(test_env.versioned_file_path());
 
         let init_result = repository::initialize(
-            config,
-            versioned_file_path,
+            test_env.env(),
+            test_env.config().clone(),
+            test_env.versioned_file_path(),
             self.name.clone(),
             self.first_version.description.clone(),
         )
@@ -100,12 +103,15 @@ impl InitialBranchBlueprint {
 
         assert!(init_result.is_ok());
 
-        let mut session = repository::try_start_session(versioned_file_path)
-            .unwrap()
-            .unwrap();
+        let mut session = repository::start_session(
+            test_env.env().clone(),
+            test_env.versioned_file_path(),
+            Snapshot::Main,
+        )
+        .unwrap();
 
         for v in &self.following_versions {
-            v.changes.execute(&versioned_file_path);
+            v.changes.execute(test_env.versioned_file_path());
 
             match session.commit(v.description.clone()).unwrap() {
                 CommitResult::Ok(CleanupResult::Ok) | CommitResult::NoUncommittedChanges => {}
@@ -123,7 +129,7 @@ impl Debug for InitialBranchBlueprint {
             .name
             .as_ref()
             .map(|n| n.to_string())
-            .unwrap_or(String::new());
+            .unwrap_or_default();
 
         let versions = iter::once(&self.first_version)
             .chain(self.following_versions.iter())
@@ -172,7 +178,7 @@ impl BranchBlueprint {
             .unwrap();
 
         for v in &self.versions {
-            v.changes.execute(&versioned_file_path);
+            v.changes.execute(versioned_file_path);
 
             match session.commit(v.description.clone()).unwrap() {
                 CommitResult::Ok(CleanupResult::Ok) | CommitResult::NoUncommittedChanges => {}
@@ -202,6 +208,6 @@ pub struct VersionBlueprint {
 
 impl Debug for VersionBlueprint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}:{:?})", &self.description, &self.changes)
+        write!(f, "({}:{:?})", self.description, self.changes)
     }
 }

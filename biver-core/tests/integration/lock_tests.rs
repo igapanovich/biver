@@ -1,33 +1,32 @@
-use crate::helpers::{samples, test_env};
-use biver_core::repository;
+use crate::helpers::test_env::TestEnv;
+use biver_std_environment::StdEnvironment;
 use rstest::rstest;
 use std::assert_matches;
 use std::error::Error;
 
 #[rstest]
 fn can_not_start_parallel_sessions() -> Result<(), Box<dyn Error>> {
-    let env = test_env::create_initialized(samples::SAMPLE1)?;
+    let test_env = TestEnv::new(StdEnvironment);
 
-    let _session1 = repository::try_start_session(&env.versioned_file_path)?;
+    let _session1 = test_env.start_session()?;
 
-    let session2_result = repository::try_start_session(&env.versioned_file_path);
-
-    assert_matches!(session2_result, Err(biver_core::Error::RepositoryLocked));
+    assert_matches!(
+        test_env.start_session().err(),
+        Some(biver_core::Error::RepositoryLocked)
+    );
 
     Ok(())
 }
 
 #[rstest]
 fn can_start_sessions_sequentially() -> Result<(), Box<dyn Error>> {
-    let env = test_env::create_initialized(samples::SAMPLE1)?;
+    let test_env = TestEnv::new(StdEnvironment);
 
-    let session1 = repository::try_start_session(&env.versioned_file_path)?;
+    let session1 = test_env.start_session()?;
 
     drop(session1);
 
-    let session2_result = repository::try_start_session(&env.versioned_file_path);
-
-    assert_matches!(session2_result, Ok(_));
+    assert!(test_env.start_session().is_ok());
 
     Ok(())
 }

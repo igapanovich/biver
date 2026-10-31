@@ -22,3 +22,6 @@ biver-directories = { path = "../biver-directories" }
 [dev-dependencies]
 rstest = "0.28.0"
 proptest = "1.11.0"
+rand = "0.10.3"
+
+biver-std-environment = { path = "../biver-std-environment" }

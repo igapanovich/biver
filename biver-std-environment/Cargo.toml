@@ -1,0 +1,7 @@
+[package]
+name = "biver-std-environment"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+biver-core = { path = "../biver-core" }

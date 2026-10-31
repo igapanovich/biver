@@ -20,3 +20,4 @@ tracing-appender = "0.2.5"
 biver-core = { path = "../biver-core" }
 biver-configuration = { path = "../biver-configuration" }
 biver-directories = { path = "../biver-directories" }
+biver-std-environment = { path = "../biver-std-environment" }

@@ -1,22 +1,27 @@
 #![allow(dead_code)]
 
 use crate::helpers::repository_blueprint::RepositoryBlueprint;
-use crate::helpers::snapshot::Snapshot;
+use crate::helpers::test_env_snapshot::TestEnvSnapshot;
+use crate::time_control_environment::TimeControlEnvironment;
 use crate::{test_config, test_dir};
-use biver_core::repository::{Session, TryStartSessionResult};
+use biver_core::data::Snapshot;
+use biver_core::environment::Environment;
+use biver_core::repository::Session;
 use biver_core::{Config, repository};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use std::{env, fs};
 
-pub struct TestEnv {
+pub struct TestEnv<Env: Environment + Clone + 'static> {
+    env: Env,
     blueprint: Option<RepositoryBlueprint>,
     test_dir: PathBuf,
     config: Config,
     versioned_file_path: PathBuf,
 }
 
-impl Drop for TestEnv {
+impl<Env: Environment + Clone> Drop for TestEnv<Env> {
     fn drop(&mut self) {
         if !self.test_dir.starts_with(env::temp_dir()) {
             panic!("Test directory must be in the system temp directory");
@@ -26,19 +31,20 @@ impl Drop for TestEnv {
     }
 }
 
-impl Debug for TestEnv {
+impl<Env: Environment + Clone> Debug for TestEnv<Env> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "TestEnv({:?})", self.blueprint)
     }
 }
 
-impl TestEnv {
-    pub fn uninitialized() -> TestEnv {
+impl<Env: Environment + Clone> TestEnv<Env> {
+    pub fn uninitialized(env: Env) -> TestEnv<Env> {
         let test_dir = test_dir::create().unwrap();
         let config = test_config::create();
         let versioned_file_path = test_dir.join("file");
 
         TestEnv {
+            env,
             blueprint: None,
             test_dir,
             config,
@@ -46,14 +52,18 @@ impl TestEnv {
         }
     }
 
-    pub fn from_blueprint(blueprint: RepositoryBlueprint) -> TestEnv {
-        let mut env = TestEnv::uninitialized();
+    pub fn from_blueprint(env: Env, blueprint: RepositoryBlueprint) -> TestEnv<Env> {
+        let mut test_env = TestEnv::uninitialized(env);
 
-        blueprint.build(env.config.clone(), &env.versioned_file_path);
+        blueprint.build(&test_env);
 
-        env.blueprint = Some(blueprint);
+        test_env.blueprint = Some(blueprint);
 
-        env
+        test_env
+    }
+
+    pub fn env(&self) -> &Env {
+        &self.env
     }
 
     pub fn config(&self) -> &Config {
@@ -69,14 +79,23 @@ impl TestEnv {
     }
 
     pub fn start_session(&self) -> Session {
-        let result = repository::try_start_session(&self.versioned_file_path).unwrap();
-        match result {
-            TryStartSessionResult::Ok(session) => session,
-            TryStartSessionResult::NotInitialized => panic!("Repository was not initialized"),
-        }
+        self.start_session_with_snapshot(Snapshot::Main).unwrap()
     }
 
-    pub fn snapshot(&self, session: &Session) -> Snapshot {
-        Snapshot::new(self.versioned_file_path(), session)
+    pub fn start_session_with_snapshot(
+        &self,
+        snapshot: Snapshot,
+    ) -> Result<Session, biver_core::Error> {
+        repository::start_session(self.env.clone(), &self.versioned_file_path, snapshot)
+    }
+
+    pub fn snapshot(&self, session: &Session) -> TestEnvSnapshot {
+        TestEnvSnapshot::new(self.versioned_file_path(), session)
+    }
+}
+
+impl TestEnv<TimeControlEnvironment> {
+    pub fn advance_time(&mut self, duration: Duration) {
+        self.env.advance_time(duration)
     }
 }

@@ -1,4 +1,4 @@
-use crate::data::VersionId;
+use crate::data::{Snapshot, VersionId};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
@@ -10,12 +10,15 @@ pub struct Paths {
     reverse_patch_dir: PathBuf,
     preview_dir: PathBuf,
     tree_file: PathBuf,
-    backup_dir: PathBuf,
-    tree_backup1_file: PathBuf,
-    tree_backup2_file: PathBuf,
-    tree_backup3_file: PathBuf,
-    tree_backup4_file: PathBuf,
-    tree_backup5_file: PathBuf,
+    snapshot_dir: PathBuf,
+    tree_snapshot1_file: PathBuf,
+    tree_snapshot2_file: PathBuf,
+    tree_snapshot3_file: PathBuf,
+    tree_snapshot4_file: PathBuf,
+    tree_snapshot5_file: PathBuf,
+    tree_snapshot6_file: PathBuf,
+    tree_snapshot7_file: PathBuf,
+    tree_snapshot8_file: PathBuf,
     config_file: PathBuf,
     schema_version: PathBuf,
     lock_file: PathBuf,
@@ -28,20 +31,23 @@ impl Paths {
 
     pub fn from_path_buf(versioned_file_path: PathBuf) -> Self {
         let repository_dir = repository_dir(&versioned_file_path);
-        let backup_dir = repository_dir.join("backup");
+        let snapshot_dir = repository_dir.join("snapshots");
 
         Paths {
             versioned_file: versioned_file_path,
-            full_content_dir: repository_dir.join("full_content"),
-            reverse_patch_dir: repository_dir.join("reverse_patch"),
-            preview_dir: repository_dir.join("preview"),
+            full_content_dir: repository_dir.join("full_contents"),
+            reverse_patch_dir: repository_dir.join("reverse_patches"),
+            preview_dir: repository_dir.join("previews"),
             tree_file: repository_dir.join("tree"),
-            tree_backup1_file: backup_dir.join("tree_backup1"),
-            tree_backup2_file: backup_dir.join("tree_backup2"),
-            tree_backup3_file: backup_dir.join("tree_backup3"),
-            tree_backup4_file: backup_dir.join("tree_backup4"),
-            tree_backup5_file: backup_dir.join("tree_backup5"),
-            backup_dir,
+            tree_snapshot1_file: snapshot_dir.join("tree_snapshot1"),
+            tree_snapshot2_file: snapshot_dir.join("tree_snapshot2"),
+            tree_snapshot3_file: snapshot_dir.join("tree_snapshot3"),
+            tree_snapshot4_file: snapshot_dir.join("tree_snapshot4"),
+            tree_snapshot5_file: snapshot_dir.join("tree_snapshot5"),
+            tree_snapshot6_file: snapshot_dir.join("tree_snapshot6"),
+            tree_snapshot7_file: snapshot_dir.join("tree_snapshot7"),
+            tree_snapshot8_file: snapshot_dir.join("tree_snapshot8"),
+            snapshot_dir,
             config_file: repository_dir.join("config.toml"),
             schema_version: repository_dir.join("schema_version"),
             lock_file: repository_dir.join("lock"),
@@ -83,8 +89,8 @@ impl Paths {
         self.preview_dir.join(version_id_file_name(version_id))
     }
 
-    pub fn backup_dir(&self) -> &Path {
-        &self.backup_dir
+    pub fn snapshot_dir(&self) -> &Path {
+        &self.snapshot_dir
     }
 
     pub fn config_file(&self) -> &Path {
@@ -99,28 +105,18 @@ impl Paths {
         &self.lock_file
     }
 
-    pub fn tree_file(&self) -> &Path {
-        &self.tree_file
-    }
-
-    pub fn tree_backup1_file(&self) -> &Path {
-        &self.tree_backup1_file
-    }
-
-    pub fn tree_backup2_file(&self) -> &Path {
-        &self.tree_backup2_file
-    }
-
-    pub fn tree_backup3_file(&self) -> &Path {
-        &self.tree_backup3_file
-    }
-
-    pub fn tree_backup4_file(&self) -> &Path {
-        &self.tree_backup4_file
-    }
-
-    pub fn tree_backup5_file(&self) -> &Path {
-        &self.tree_backup5_file
+    pub fn tree_file(&self, snapshot: Snapshot) -> &Path {
+        match snapshot {
+            Snapshot::Main => &self.tree_file,
+            Snapshot::Snapshot1 => &self.tree_snapshot1_file,
+            Snapshot::Snapshot2 => &self.tree_snapshot2_file,
+            Snapshot::Snapshot3 => &self.tree_snapshot3_file,
+            Snapshot::Snapshot4 => &self.tree_snapshot4_file,
+            Snapshot::Snapshot5 => &self.tree_snapshot5_file,
+            Snapshot::Snapshot6 => &self.tree_snapshot6_file,
+            Snapshot::Snapshot7 => &self.tree_snapshot7_file,
+            Snapshot::Snapshot8 => &self.tree_snapshot8_file,
+        }
     }
 }
 

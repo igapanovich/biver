@@ -29,11 +29,20 @@ pub enum Error {
     #[error("attempted to use a broken instance")]
     Broken,
 
+    #[error("repository is not initialized")]
+    RepositoryNotInitialized,
+
     #[error("repository is locked")]
     RepositoryLocked,
 
+    #[error("repository is opened in read-only mode")]
+    RepositoryReadOnly,
+
     #[error("repository schema is incompatible: {0}")]
     IncompatibleSchemaVersion(String),
+
+    #[error("repository snapshot is not available")]
+    SnapshotUnavailable,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

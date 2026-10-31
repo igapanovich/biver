@@ -1,14 +1,14 @@
 use crate::command_line_arguments::{BranchCommand, Command, CommandLineArguments};
 use crate::error::{Error, Result, Severity, error, warning};
-use crate::extensions::ResultExt;
 use crate::target_expression::{BranchOrVersion, VersionOrUncommitted};
-use biver_core::data::BranchName;
+use biver_core::data::{BranchName, Snapshot};
 use biver_core::repository;
 use biver_core::repository::{
     AmendResult, CheckOutBranchResult, CheckOutVersionResult, CommitResult, CreateBranchResult,
     InitializeResult, RebaseResult, RemoveBranchResult, RenameBranchResult, RestoreVersionResult,
-    Session, SoftResetResult, TryStartSessionResult, UpdateDescriptionResult,
+    Session, SoftResetResult, UpdateDescriptionResult,
 };
+use biver_std_environment::StdEnvironment;
 use clap::Parser;
 use colored::Colorize;
 use std::ffi::{OsStr, OsString};
@@ -22,8 +22,8 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 mod command_line_arguments;
 mod error;
-mod extensions;
 mod formatting;
+mod snapshot_expression;
 mod target_expression;
 mod viewer;
 
@@ -57,19 +57,23 @@ fn run_command(command: Command) -> Result<()> {
     match command {
         Command::Status {
             versioned_file_path,
+            snapshot,
             all,
         } => {
-            let session_result = repository::try_start_session(&versioned_file_path)?;
+            let snapshot = snapshot_expression::resolve_optional(snapshot.as_deref())?;
+            let session_result =
+                repository::start_session(StdEnvironment, &versioned_file_path, snapshot);
 
             match session_result {
-                TryStartSessionResult::NotInitialized => println!("Not initialized"),
-                TryStartSessionResult::Ok(session) => {
+                Ok(session) => {
                     formatting::print_repository_data(
                         session.tree(),
                         session.has_uncommitted_changes()?,
                         all,
                     );
                 }
+                Err(biver_core::Error::RepositoryNotInitialized) => println!("Not initialized"),
+                Err(e) => return Err(Error::from(e)),
             }
 
             success()
@@ -77,9 +81,12 @@ fn run_command(command: Command) -> Result<()> {
 
         Command::Preview {
             versioned_file_path,
+            snapshot,
             target,
         } => {
-            let session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let snapshot = snapshot_expression::resolve_optional(snapshot.as_deref())?;
+            let session =
+                repository::start_session(StdEnvironment, &versioned_file_path, snapshot)?;
 
             let (_, preview) = preview(&session, Some(&target))?;
 
@@ -90,10 +97,13 @@ fn run_command(command: Command) -> Result<()> {
 
         Command::Compare {
             versioned_file_path,
+            snapshot,
             target1,
             target2,
         } => {
-            let session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let snapshot = snapshot_expression::resolve_optional(snapshot.as_deref())?;
+            let session =
+                repository::start_session(StdEnvironment, &versioned_file_path, snapshot)?;
 
             let (description1, preview1) = preview(&session, Some(&target1))?;
             let (description2, preview2) = preview(&session, target2.as_deref())?;
@@ -121,6 +131,7 @@ fn run_command(command: Command) -> Result<()> {
             let config = core_config(versioned_file_path.extension())?;
 
             let init_result = repository::initialize(
+                &StdEnvironment,
                 config,
                 &versioned_file_path,
                 branch_name,
@@ -137,7 +148,8 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             description,
         } => {
-            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let mut session =
+                repository::start_session(StdEnvironment, &versioned_file_path, Snapshot::Main)?;
 
             let result = session.commit(description.unwrap_or_default())?;
             match result {
@@ -152,7 +164,8 @@ fn run_command(command: Command) -> Result<()> {
             confirmed,
             description,
         } => {
-            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let mut session =
+                repository::start_session(StdEnvironment, &versioned_file_path, Snapshot::Main)?;
 
             if !confirmed {
                 println!("Are you sure you want to overwrite the head version? (y/N)");
@@ -179,7 +192,8 @@ fn run_command(command: Command) -> Result<()> {
             target,
             description,
         } => {
-            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let mut session =
+                repository::start_session(StdEnvironment, &versioned_file_path, Snapshot::Main)?;
 
             let Some(target_id) = target_expression::resolve_version(&session, &target) else {
                 return error("Invalid target");
@@ -197,7 +211,8 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             confirmed,
         } => {
-            let session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let session =
+                repository::start_session(StdEnvironment, &versioned_file_path, Snapshot::Main)?;
 
             if !session.has_uncommitted_changes()? {
                 return warning("No uncommitted changes");
@@ -221,7 +236,8 @@ fn run_command(command: Command) -> Result<()> {
             confirmed,
             target,
         } => {
-            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let mut session =
+                repository::start_session(StdEnvironment, &versioned_file_path, Snapshot::Main)?;
 
             if !confirmed {
                 println!("Are you sure you want to reset? (y/N)");
@@ -253,7 +269,8 @@ fn run_command(command: Command) -> Result<()> {
             rebased_version,
             new_parent,
         } => {
-            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let mut session =
+                repository::start_session(StdEnvironment, &versioned_file_path, Snapshot::Main)?;
 
             if !confirmed {
                 println!("Are you sure you want to rebase the current branch? (y/N)");
@@ -290,7 +307,8 @@ fn run_command(command: Command) -> Result<()> {
             versioned_file_path,
             target,
         } => {
-            let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let mut session =
+                repository::start_session(StdEnvironment, &versioned_file_path, Snapshot::Main)?;
 
             let Some(target) = target_expression::resolve_branch_or_version(&session, &target)
             else {
@@ -319,12 +337,15 @@ fn run_command(command: Command) -> Result<()> {
 
         Command::Restore {
             versioned_file_path,
+            snapshot,
             output,
             target,
         } => {
+            let snapshot = snapshot_expression::resolve_optional(snapshot.as_deref())?;
             let output = output.unwrap_or_else(|| versioned_file_path.clone());
 
-            let session = repository::try_start_session(&versioned_file_path)?.result()?;
+            let session =
+                repository::start_session(StdEnvironment, &versioned_file_path, snapshot)?;
 
             let Some(target) = target_expression::resolve_version(&session, &target) else {
                 return error("Invalid target");
@@ -353,7 +374,11 @@ fn run_command(command: Command) -> Result<()> {
                     return error("Invalid branch name");
                 };
 
-                let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+                let mut session = repository::start_session(
+                    StdEnvironment,
+                    &versioned_file_path,
+                    Snapshot::Main,
+                )?;
 
                 let head_version_d = session.tree().head_version_id();
 
@@ -370,8 +395,11 @@ fn run_command(command: Command) -> Result<()> {
 
             BranchCommand::List {
                 versioned_file_path,
+                snapshot,
             } => {
-                let session = repository::try_start_session(&versioned_file_path)?.result()?;
+                let snapshot = snapshot_expression::resolve_optional(snapshot.as_deref())?;
+                let session =
+                    repository::start_session(StdEnvironment, &versioned_file_path, snapshot)?;
                 formatting::print_branch_list(session.tree());
                 success()
             }
@@ -389,7 +417,11 @@ fn run_command(command: Command) -> Result<()> {
                     return error("Invalid new branch name");
                 };
 
-                let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+                let mut session = repository::start_session(
+                    StdEnvironment,
+                    &versioned_file_path,
+                    Snapshot::Main,
+                )?;
 
                 let result = session.rename_branch(&old_name, new_name)?;
 
@@ -413,7 +445,11 @@ fn run_command(command: Command) -> Result<()> {
                     return error("Invalid branch name");
                 };
 
-                let mut session = repository::try_start_session(&versioned_file_path)?.result()?;
+                let mut session = repository::start_session(
+                    StdEnvironment,
+                    &versioned_file_path,
+                    Snapshot::Main,
+                )?;
 
                 if !confirmed {
                     println!("Are you sure you want to remove this branch? (y/N)");
@@ -437,6 +473,17 @@ fn run_command(command: Command) -> Result<()> {
                 }
             }
         },
+
+        Command::TidyUp {
+            versioned_file_path,
+        } => {
+            let session =
+                repository::start_session(StdEnvironment, &versioned_file_path, Snapshot::Main)?;
+
+            session.tidy_up()?;
+
+            Ok(())
+        }
     }
 }
 
@@ -513,7 +560,7 @@ fn init_tracing() -> Result<()> {
         .max_log_files(14)
         .build(biver_directories::logs()?)?;
 
-    let stdout_layer = tracing_subscriber::fmt::layer()
+    let file_layer = tracing_subscriber::fmt::layer()
         .pretty()
         .with_file(false)
         .with_ansi(false)
@@ -522,7 +569,7 @@ fn init_tracing() -> Result<()> {
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn,biver=info")),
         );
 
-    tracing_subscriber::registry().with(stdout_layer).init();
+    tracing_subscriber::registry().with(file_layer).init();
 
     Ok(())
 }

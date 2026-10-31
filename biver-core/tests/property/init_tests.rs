@@ -1,7 +1,8 @@
-use crate::helpers::extensions::UnwrapExt;
 use crate::helpers::test_env::TestEnv;
 use crate::helpers::{arb, assert_repository_integrity};
+use biver_core::data::Snapshot;
 use biver_core::repository;
+use biver_std_environment::StdEnvironment;
 use proptest::option;
 use proptest::prelude::*;
 use std::fs;
@@ -10,15 +11,15 @@ use std::io::Read;
 proptest! {
     #[test]
     fn init_properties(init_bytes in arb::bytes(), branch_name in option::of(arb::branch_name()), description in any::<String>()) {
-        let env = TestEnv::uninitialized();
+        let test_env = TestEnv::uninitialized(StdEnvironment);
 
-        fs::write(&env.versioned_file_path(), &init_bytes)?;
+        fs::write(test_env.versioned_file_path(), &init_bytes)?;
 
-        let init_result = repository::initialize(env.config().clone(), env.versioned_file_path(), branch_name, description)?;
+        let init_result = repository::initialize(&StdEnvironment, test_env.config().clone(), test_env.versioned_file_path(), branch_name, description)?;
 
         prop_assert!(init_result.is_ok());
 
-        let session = repository::try_start_session(env.versioned_file_path())?.unwrap();
+        let session = repository::start_session(StdEnvironment, test_env.versioned_file_path(), Snapshot::Main)?;
         let tree = session.tree();
 
         let mut root_content = Vec::new();
@@ -33,6 +34,7 @@ proptest! {
         prop_assert_eq!(root_content, init_bytes.as_ref(), "root version has the same content as versioned file");
         prop_assert!(!session.has_uncommitted_changes()?, "init doesn't leave uncommitted changes");
 
-        assert_repository_integrity(session)?;
+        drop(session);
+        assert_repository_integrity(test_env)?;
     }
 }
