@@ -619,6 +619,10 @@ impl Session {
         self.assert_not_read_only()?;
 
         use_break!(self, {
+            if self.tree.branch_tip(&old_branch_name).is_none() {
+                return Ok(RenameBranchResult::OldNameNotFound);
+            }
+
             if *old_branch_name == new_branch_name {
                 return Ok(RenameBranchResult::Ok);
             }
