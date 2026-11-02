@@ -40,7 +40,7 @@ proptest! {
         prop_assert!(diff.removed_branches.contains(&old_branch_name), "rename_branch removes the branch with the old name");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -63,7 +63,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed rename_branch does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -84,6 +84,6 @@ proptest! {
         prop_assert_eq!(before, after, "failed rename_branch does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }

@@ -46,7 +46,7 @@ proptest! {
         prop_assert_eq!(diff.removed_versions.iter().into_ids().difference(&version_ids_exclusive_to_head_branch).count(), 0, "successful rebase may only remove versions exclusively belonging to head branch");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -72,7 +72,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed rebase does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -99,7 +99,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed rebase does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -125,7 +125,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed rebase does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -148,7 +148,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed rebase does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -175,6 +175,6 @@ proptest! {
         prop_assert_eq!(before, after, "failed rebase does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }

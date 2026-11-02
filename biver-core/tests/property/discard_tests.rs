@@ -18,6 +18,6 @@ proptest! {
         prop_assert_eq!(before.versions, after.versions, "discard does not modify versions");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }

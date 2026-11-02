@@ -8,12 +8,12 @@ use proptest::{prop_assert, prop_assert_eq};
 use uuid::Uuid;
 
 pub fn assert_repository_integrity(
-    test_env: TestEnv<impl Environment + Clone>,
+    test_env: &TestEnv<impl Environment + Clone>,
 ) -> Result<(), TestCaseError> {
     let paths = Paths::new(test_env.versioned_file_path());
 
-    assert_full_content_dir_integrity(&test_env, &paths)?;
-    assert_version_content_integrity_all(&test_env)?;
+    assert_full_content_dir_integrity(test_env, &paths)?;
+    assert_version_content_integrity_all(test_env)?;
 
     Ok(())
 }

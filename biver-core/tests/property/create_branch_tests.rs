@@ -37,7 +37,7 @@ proptest! {
         prop_assert!(diff.removed_branches.is_empty(), "successful create_branch does not remove branches");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -58,7 +58,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed create_branch does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -79,6 +79,6 @@ proptest! {
         prop_assert_eq!(before, after, "failed create_branch does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }

@@ -41,7 +41,7 @@ proptest! {
         prop_assert!(diff.removed_branches.is_empty(), "successful soft_reset does not remove branches");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -61,7 +61,7 @@ proptest! {
         prop_assert_eq!(before, after, "noop soft_reset does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -85,7 +85,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed soft_reset does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -111,7 +111,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed soft_reset does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -131,6 +131,6 @@ proptest! {
         prop_assert_eq!(before, after, "failed soft_reset does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }

@@ -25,7 +25,7 @@ proptest! {
         prop_assert_eq!(&before.branches, &after.branches, "successful restore_version does not modify branches");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -45,7 +45,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed restore_version does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -65,7 +65,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed restore_version does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -93,7 +93,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed restore_version does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     fn restore_version_into_another_file_ok_properties(test_env in arb::test_env(), version_path in arb::version_path(), sub_path in arb::fs_path()) {
@@ -121,6 +121,6 @@ proptest! {
         prop_assert_eq!(&before.branches, &after.branches, "successful restore_version does not modify branches");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }

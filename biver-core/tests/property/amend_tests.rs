@@ -39,7 +39,7 @@ proptest! {
         );
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -73,7 +73,7 @@ proptest! {
         );
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -93,7 +93,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed amend does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -113,7 +113,7 @@ proptest! {
         prop_assert_eq!(before, after, "failed amend does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 
     #[test]
@@ -137,6 +137,6 @@ proptest! {
         prop_assert_eq!(before, after, "failed amend does not modify anything");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }

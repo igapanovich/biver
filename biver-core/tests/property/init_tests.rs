@@ -35,6 +35,6 @@ proptest! {
         prop_assert!(!session.has_uncommitted_changes()?, "init doesn't leave uncommitted changes");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }

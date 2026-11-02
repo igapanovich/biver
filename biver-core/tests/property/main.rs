@@ -9,6 +9,7 @@ mod time_control_environment;
 
 mod helpers;
 
+mod aa_snapshot_tests;
 mod amend_tests;
 mod check_out_branch_tests;
 mod check_out_version_tests;
@@ -20,7 +21,6 @@ mod rebase_tests;
 mod remove_branch_tests;
 mod rename_branch_tests;
 mod restore_version_tests;
-mod snapshot_tests;
 mod soft_reset_tests;
 mod tidy_up_tests;
 mod update_description_tests;

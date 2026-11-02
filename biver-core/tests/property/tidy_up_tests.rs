@@ -17,6 +17,6 @@ proptest! {
         prop_assert_eq!(before, after, "tidy_up does not modify live data");
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }

@@ -34,6 +34,6 @@ proptest! {
         }
 
         drop(session);
-        assert_repository_integrity(test_env)?;
+        assert_repository_integrity(&test_env)?;
     }
 }
