@@ -1,7 +1,7 @@
-use crate::helpers::extensions::{BiverResultUnwrap, IndexExt};
-use crate::helpers::file_operation::{FileOperation, FileOperations};
-use crate::helpers::test_env::TestEnv;
-use crate::helpers::version_path::{ResolveVersionPathExt, VersionPath};
+use crate::common::extensions::{BiverResultUnwrap, IndexExt};
+use crate::common::file_operation::{FileOperation, FileOperations};
+use crate::common::test_env::TestEnv;
+use crate::common::version_path::{ResolveVersionPathExt, VersionPath};
 use biver_core::data::{BranchName, Snapshot};
 use biver_core::environment::Environment;
 use biver_core::repository;

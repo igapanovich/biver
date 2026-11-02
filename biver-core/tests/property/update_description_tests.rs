@@ -1,7 +1,7 @@
-use crate::helpers::diff::Diff;
-use crate::helpers::test_env_snapshot::TestEnvSnapshot;
-use crate::helpers::version_path::ResolveVersionPathExt;
-use crate::helpers::{arb, assert_repository_integrity};
+use crate::common::diff::Diff;
+use crate::common::test_env_snapshot::TestEnvSnapshot;
+use crate::common::version_path::ResolveVersionPathExt;
+use crate::common::{arb, assert_repository_integrity};
 use proptest::prelude::*;
 
 proptest! {

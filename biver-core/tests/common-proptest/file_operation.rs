@@ -1,5 +1,5 @@
-use crate::helpers::byte_chunk::ByteChunk;
-use crate::helpers::extensions::IndexExt;
+use crate::common::byte_chunk::ByteChunk;
+use crate::common::extensions::IndexExt;
 use proptest::sample::Index;
 use std::fmt::Debug;
 use std::fs;

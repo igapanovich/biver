@@ -1,8 +1,8 @@
-use crate::helpers::arb::TestEnvOption::{AtLeastTwoVersions, HeadOnBranch, HeadOnVersion};
-use crate::helpers::diff::Diff;
-use crate::helpers::extensions::IdsExt;
-use crate::helpers::test_env_snapshot::TestEnvSnapshot;
-use crate::helpers::{arb, assert_repository_integrity};
+use crate::common::arb::TestEnvOption::{AtLeastTwoVersions, HeadOnBranch, HeadOnVersion};
+use crate::common::diff::Diff;
+use crate::common::extensions::IdsExt;
+use crate::common::test_env_snapshot::TestEnvSnapshot;
+use crate::common::{arb, assert_repository_integrity};
 use biver_core::repository::{CleanupResult, RebaseResult};
 use itertools::Itertools;
 use proptest::prelude::*;

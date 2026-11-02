@@ -1,12 +1,14 @@
-use crate::helpers::byte_chunk::ByteChunk;
-use crate::helpers::file_operation::FileOperation;
-use crate::helpers::repository_blueprint::{
+use crate::common::byte_chunk::ByteChunk;
+use crate::common::file_operation::FileOperation;
+use crate::common::repository_blueprint::{
     BranchBlueprint, HeadBlueprint, InitialBranchBlueprint, RepositoryBlueprint, VersionBlueprint,
 };
-use crate::helpers::test_env::TestEnv;
-use crate::helpers::time_control_environment::TimeControlEnvironment;
-use crate::helpers::version_path::VersionPath;
+use crate::common::test_env::TestEnv;
+use crate::common::time_control_environment::TimeControlEnvironment;
+use crate::common::unreliable_fs_environment::UnreliableFsEnvironment;
+use crate::common::version_path::VersionPath;
 use biver_core::data::{BranchName, VersionId};
+use biver_core::environment::Environment;
 use biver_std_environment::StdEnvironment;
 use proptest::collection::vec;
 use proptest::option;
@@ -39,6 +41,13 @@ pub fn test_env_with_opts(
 pub fn test_env_with_time_control() -> impl Strategy<Value = TestEnv<TimeControlEnvironment>> {
     repository_blueprint(&[])
         .prop_map(|b| TestEnv::from_blueprint(TimeControlEnvironment::new(), b))
+}
+
+pub fn test_env_with_unreliable_fs<Inner: Environment + Clone + 'static>(
+    inner: Inner,
+) -> impl Strategy<Value = TestEnv<UnreliableFsEnvironment<Inner>>> {
+    repository_blueprint(&[])
+        .prop_map(move |b| TestEnv::from_blueprint(UnreliableFsEnvironment::new(inner.clone()), b))
 }
 
 pub fn bytes() -> impl Strategy<Value = ByteChunk> {
@@ -241,8 +250,8 @@ pub fn fs_path() -> impl Strategy<Value = PathBuf> {
 }
 
 pub mod repository_operation {
-    use crate::helpers::arb;
-    use crate::helpers::repository_operation::{
+    use crate::common::arb;
+    use crate::common::repository_operation::{
         RepositoryOperation, TargetBranch, TargetFile, TargetVersion,
     };
     use proptest::collection::vec;

@@ -1,4 +1,4 @@
-use crate::helpers::{arb, assert_repository_integrity};
+use crate::common::{arb, assert_repository_integrity};
 use proptest::prelude::*;
 
 proptest! {

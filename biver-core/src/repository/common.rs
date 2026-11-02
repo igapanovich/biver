@@ -22,7 +22,7 @@ pub fn write_tree(env: &(impl Environment + ?Sized), paths: &Paths, tree: &Tree)
     let tree_tmp_path = main.with_extension("tmp");
 
     if using_tmp {
-        env.rename_file(main, &tree_tmp_path)?;
+        env.overwrite_copy_file(main, &tree_tmp_path)?;
     }
 
     ciborium::ser::into_writer(&tree, env.create_file(main)?)?;

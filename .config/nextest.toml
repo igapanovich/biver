@@ -1,0 +1,3 @@
+[[profile.default.overrides]]
+filter = 'binary(=stress)'
+slow-timeout = { period = "10m" }

@@ -1,8 +1,8 @@
-use crate::helpers::arb::TestEnvOption::AtLeastTwoBranches;
-use crate::helpers::diff::Diff;
-use crate::helpers::extensions::IndexExt;
-use crate::helpers::test_env_snapshot::TestEnvSnapshot;
-use crate::helpers::{arb, assert_repository_integrity};
+use crate::common::arb::TestEnvOption::AtLeastTwoBranches;
+use crate::common::diff::Diff;
+use crate::common::extensions::IndexExt;
+use crate::common::test_env_snapshot::TestEnvSnapshot;
+use crate::common::{arb, assert_repository_integrity};
 use biver_core::repository::RenameBranchResult;
 use itertools::Itertools;
 use proptest::prelude::*;

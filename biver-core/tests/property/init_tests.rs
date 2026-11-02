@@ -1,5 +1,5 @@
-use crate::helpers::test_env::TestEnv;
-use crate::helpers::{arb, assert_repository_integrity};
+use crate::common::test_env::TestEnv;
+use crate::common::{arb, assert_repository_integrity};
 use biver_core::data::Snapshot;
 use biver_core::repository;
 use biver_std_environment::StdEnvironment;

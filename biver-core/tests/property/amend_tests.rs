@@ -1,10 +1,10 @@
-use crate::helpers::arb::TestEnvOption::{
+use crate::common::arb::TestEnvOption::{
     AtLeastTwoBranches, HeadOnBranch, HeadOnVersion, NoUncommittedChanges, SingleBranch,
     UncommittedChanges,
 };
-use crate::helpers::diff::Diff;
-use crate::helpers::test_env_snapshot::TestEnvSnapshot;
-use crate::helpers::{arb, assert_repository_integrity};
+use crate::common::diff::Diff;
+use crate::common::test_env_snapshot::TestEnvSnapshot;
+use crate::common::{arb, assert_repository_integrity};
 use biver_core::repository::{AmendResult, CleanupResult};
 use itertools::Itertools;
 use proptest::prelude::*;

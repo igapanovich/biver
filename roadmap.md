@@ -4,5 +4,4 @@
 
 # 0.2
 
-- chaos tests
 - GUI

@@ -1,5 +1,5 @@
-use crate::helpers::version_path::ResolveVersionPathExt;
-use crate::helpers::{arb, assert_repository_integrity};
+use crate::common::version_path::ResolveVersionPathExt;
+use crate::common::{arb, assert_repository_integrity};
 use biver_core::data::Head;
 use biver_core::repository::CheckOutVersionResult;
 use proptest::prelude::*;

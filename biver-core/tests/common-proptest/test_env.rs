@@ -1,7 +1,7 @@
-use crate::helpers::repository_blueprint::RepositoryBlueprint;
-use crate::helpers::test_env_snapshot::TestEnvSnapshot;
-use crate::helpers::time_control_environment::TimeControlEnvironment;
-use crate::helpers::{test_config, test_dir};
+use crate::common::repository_blueprint::RepositoryBlueprint;
+use crate::common::test_env_snapshot::TestEnvSnapshot;
+use crate::common::time_control_environment::TimeControlEnvironment;
+use crate::common::{test_config, test_dir};
 use biver_core::data::Snapshot;
 use biver_core::environment::Environment;
 use biver_core::repository::Session;
@@ -17,10 +17,15 @@ pub struct TestEnv<Env: Environment + Clone + 'static> {
     test_dir: PathBuf,
     config: Config,
     versioned_file_path: PathBuf,
+    clone: bool,
 }
 
 impl<Env: Environment + Clone> Drop for TestEnv<Env> {
     fn drop(&mut self) {
+        if self.clone {
+            return;
+        }
+
         if !self.test_dir.starts_with(env::temp_dir()) {
             panic!("Test directory must be in the system temp directory");
         }
@@ -47,6 +52,7 @@ impl<Env: Environment + Clone> TestEnv<Env> {
             test_dir,
             config,
             versioned_file_path,
+            clone: false,
         }
     }
 
@@ -62,6 +68,10 @@ impl<Env: Environment + Clone> TestEnv<Env> {
 
     pub fn env(&self) -> &Env {
         &self.env
+    }
+
+    pub fn env_mut(&mut self) -> &mut Env {
+        &mut self.env
     }
 
     pub fn config(&self) -> &Config {
@@ -80,6 +90,10 @@ impl<Env: Environment + Clone> TestEnv<Env> {
         self.start_session_with_snapshot(Snapshot::Main).unwrap()
     }
 
+    pub fn try_start_session(&self) -> Result<Session, biver_core::Error> {
+        self.start_session_with_snapshot(Snapshot::Main)
+    }
+
     pub fn start_session_with_snapshot(
         &self,
         snapshot: Snapshot,
@@ -89,6 +103,20 @@ impl<Env: Environment + Clone> TestEnv<Env> {
 
     pub fn snapshot(&self, session: &Session) -> TestEnvSnapshot {
         TestEnvSnapshot::new(self.versioned_file_path(), session)
+    }
+
+    pub fn clone_with_env<NewEnv: Environment + Clone>(
+        &self,
+        create_env: fn(&Env) -> NewEnv,
+    ) -> TestEnv<NewEnv> {
+        TestEnv {
+            env: create_env(self.env()),
+            blueprint: None,
+            test_dir: self.test_dir.clone(),
+            config: self.config.clone(),
+            versioned_file_path: self.versioned_file_path.clone(),
+            clone: true,
+        }
     }
 }
 

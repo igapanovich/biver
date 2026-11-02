@@ -1,5 +1,5 @@
-use crate::helpers::diff::Diff;
-use crate::helpers::extensions::IteratorExt;
+use crate::common::diff::Diff;
+use crate::common::extensions::IteratorExt;
 use std::collections::HashMap;
 use std::hash::Hash;
 use variantly::Variantly;

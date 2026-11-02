@@ -1,4 +1,4 @@
-use crate::helpers::extensions::IndexExt;
+use crate::common::extensions::IndexExt;
 use biver_core::data::{Tree, Version};
 use itertools::Itertools;
 use proptest::sample::Index;

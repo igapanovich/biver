@@ -1,5 +1,5 @@
-use crate::helpers::diff::Diff;
-use crate::helpers::hash_map_diff::ValueDifference;
+use crate::common::diff::Diff;
+use crate::common::hash_map_diff::ValueDifference;
 use biver_core::data::{BranchName, Head, Version, VersionId};
 use biver_core::repository::Session;
 use std::collections::{HashMap, HashSet};

@@ -1,0 +1,70 @@
+use crate::common::repository_operation::RepositoryOperation;
+use crate::common::test_env::TestEnv;
+use crate::common::time_control_environment::TimeControlEnvironment;
+use crate::common::{arb, assert_repository_integrity};
+use biver_core::repository::Paths;
+use proptest::prelude::*;
+use std::time::Duration;
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    #[test]
+    fn integrity_test_instance1(test_env in arb::test_env_with_time_control(), operations in arb::repository_operation::operations()) {
+        integrity_test(test_env, operations)?;
+    }
+
+    #[test]
+    fn integrity_test_instance2(test_env in arb::test_env_with_time_control(), operations in arb::repository_operation::operations()) {
+        integrity_test(test_env, operations)?;
+    }
+
+    #[test]
+    fn integrity_test_instance3(test_env in arb::test_env_with_time_control(), operations in arb::repository_operation::operations()) {
+        integrity_test(test_env, operations)?;
+    }
+
+    #[test]
+    fn integrity_test_instance4(test_env in arb::test_env_with_time_control(), operations in arb::repository_operation::operations()) {
+        integrity_test(test_env, operations)?;
+    }
+
+    #[test]
+    fn integrity_test_instance5(test_env in arb::test_env_with_time_control(), operations in arb::repository_operation::operations()) {
+        integrity_test(test_env, operations)?;
+    }
+
+    #[test]
+    fn integrity_test_instance6(test_env in arb::test_env_with_time_control(), operations in arb::repository_operation::operations()) {
+        integrity_test(test_env, operations)?;
+    }
+
+    #[test]
+    fn integrity_test_instance7(test_env in arb::test_env_with_time_control(), operations in arb::repository_operation::operations()) {
+        integrity_test(test_env, operations)?;
+    }
+
+    #[test]
+    fn integrity_test_instance8(test_env in arb::test_env_with_time_control(), operations in arb::repository_operation::operations()) {
+        integrity_test(test_env, operations)?;
+    }
+}
+
+fn integrity_test(
+    mut test_env: TestEnv<TimeControlEnvironment>,
+    operations: Vec<RepositoryOperation>,
+) -> Result<(), TestCaseError> {
+    let paths = Paths::new(test_env.versioned_file_path());
+
+    for op in operations {
+        test_env.advance_time(Duration::from_hours(3));
+
+        let mut session = test_env.start_session();
+        op.execute(&paths, &mut session)?;
+
+        drop(session);
+        assert_repository_integrity(&test_env)?;
+    }
+
+    Ok(())
+}

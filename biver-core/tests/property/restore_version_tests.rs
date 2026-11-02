@@ -1,6 +1,6 @@
-use crate::helpers::arb::TestEnvOption::{NoUncommittedChanges, UncommittedChanges};
-use crate::helpers::version_path::ResolveVersionPathExt;
-use crate::helpers::{arb, assert_repository_integrity};
+use crate::common::arb::TestEnvOption::{NoUncommittedChanges, UncommittedChanges};
+use crate::common::version_path::ResolveVersionPathExt;
+use crate::common::{arb, assert_repository_integrity};
 use biver_core::repository::{Paths, RestoreVersionResult};
 use proptest::option;
 use proptest::prelude::*;

@@ -1,7 +1,6 @@
-#[path = "../proptest-common/lib.rs"]
-mod helpers;
+#[path = "../common-proptest/lib.rs"]
+mod common;
 
-mod aa_snapshot_tests;
 mod amend_tests;
 mod check_out_branch_tests;
 mod check_out_version_tests;
