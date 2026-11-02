@@ -1,12 +1,4 @@
-#[path = "../common/test_dir.rs"]
-mod test_dir;
-
-#[path = "../common/test_config.rs"]
-mod test_config;
-
-#[path = "../common/time_control_environment.rs"]
-mod time_control_environment;
-
+#[path = "../proptest-common/lib.rs"]
 mod helpers;
 
 mod aa_snapshot_tests;

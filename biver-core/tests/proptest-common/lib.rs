@@ -1,3 +1,14 @@
+#![allow(dead_code, unused_imports, unused_macros)]
+
+#[path = "../common/test_dir.rs"]
+mod test_dir;
+
+#[path = "../common/test_config.rs"]
+mod test_config;
+
+#[path = "../common/time_control_environment.rs"]
+mod time_control_environment;
+
 pub mod arb;
 mod assert_repository_integrity;
 mod byte_chunk;
