@@ -16,6 +16,7 @@ pub enum Command {
         versioned_file_path: PathBuf,
 
         /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        #[arg(long = "snapshot")]
         snapshot: Option<String>,
 
         /// Show all versions (by default, limited to 20 most recent)
@@ -30,6 +31,7 @@ pub enum Command {
         versioned_file_path: PathBuf,
 
         /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        #[arg(long = "snapshot")]
         snapshot: Option<String>,
 
         /// Target branch or version to preview. May be one of the following (in order of precedence): branch name, version ID, head offset (@, @1, @2), version nickname (adjective-noun, adjectivenoun, an).
@@ -43,6 +45,7 @@ pub enum Command {
         versioned_file_path: PathBuf,
 
         /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        #[arg(long = "snapshot")]
         snapshot: Option<String>,
 
         /// Target branch or version to compare. May be one of the following (in order of precedence): branch name, version ID, head offset (@, @1, @2), version nickname (adjective-noun, adjectivenoun, an).
@@ -158,6 +161,7 @@ pub enum Command {
         versioned_file_path: PathBuf,
 
         /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        #[arg(long = "snapshot")]
         snapshot: Option<String>,
 
         /// Output file path. If not specified, the versioned file path will be used.
@@ -196,6 +200,7 @@ pub enum BranchCommand {
         versioned_file_path: PathBuf,
 
         /// Repository snapshot to use. Must be a number from 1 to 8 inclusive.
+        #[arg(long = "snapshot")]
         snapshot: Option<String>,
     },
 
