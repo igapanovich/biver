@@ -20,7 +20,7 @@ pub struct Paths {
     tree_snapshot7_file: PathBuf,
     tree_snapshot8_file: PathBuf,
     config_file: PathBuf,
-    schema_version: PathBuf,
+    schema_version_file: PathBuf,
     lock_file: PathBuf,
 }
 
@@ -49,7 +49,7 @@ impl Paths {
             tree_snapshot8_file: snapshot_dir.join("tree_snapshot8"),
             snapshot_dir,
             config_file: repository_dir.join("config.toml"),
-            schema_version: repository_dir.join("schema_version"),
+            schema_version_file: repository_dir.join("schema_version"),
             lock_file: repository_dir.join("lock"),
             repository_dir,
         }
@@ -98,7 +98,7 @@ impl Paths {
     }
 
     pub fn schema_version_file(&self) -> &Path {
-        &self.schema_version
+        &self.schema_version_file
     }
 
     pub fn lock_file(&self) -> &Path {
