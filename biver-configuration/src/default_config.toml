@@ -1,3 +1,5 @@
+auto_tidy_up = true
+
 [default_file_type_rules]
 create_patch_command = ["xdelta3", "-e", "-s", "{old}", "{new}", "{patch}"]
 apply_patch_command = ["xdelta3", "-d", "-s", "{old}", "{patch}", "{new}"]

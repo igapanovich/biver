@@ -1,4 +1,4 @@
-use crate::error::{Error, Result, Severity};
+use crate::error::{Error, Result};
 use biver_core::data::Snapshot;
 
 pub fn resolve_optional(expr: Option<&str>) -> Result<Snapshot> {
@@ -23,9 +23,9 @@ pub fn resolve(expr: &str) -> Result<Snapshot> {
         "6" => Ok(Snapshot::Snapshot6),
         "7" => Ok(Snapshot::Snapshot7),
         "8" => Ok(Snapshot::Snapshot8),
-        _ => Err(Error {
-            message: format!("Invalid snapshot identifier '{}'", expr),
-            severity: Severity::Error,
-        }),
+        _ => Err(Error::from_string(format!(
+            "Invalid snapshot identifier '{}'",
+            expr
+        ))),
     }
 }

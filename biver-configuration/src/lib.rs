@@ -8,6 +8,7 @@ const CONFIG_FILE_NAME: &str = "config.toml";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GlobalConfiguration {
+    pub auto_tidy_up: Option<bool>,
     pub default_file_type_rules: DefaultFileTypeRules,
     pub file_type_rules: Vec<FileTypeRules>,
 }
