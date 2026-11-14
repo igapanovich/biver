@@ -1,7 +1,11 @@
 [package]
-name = "biver"
+name = "biver-cli"
 version.workspace = true
 edition.workspace = true
+
+[[bin]]
+name = "biv"
+path = "src/main.rs"
 
 [dependencies]
 chrono.workspace = true
